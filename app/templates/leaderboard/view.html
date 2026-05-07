@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ league.name }}</h1>
+
+{% if leagues|length > 1 %}
+  <div class="card" style="padding:8px 12px;">
+    <select onchange="window.location='{{ url_for('leaderboard.view', league_id=0) }}'.replace('/0', '/' + this.value);"
+            class="field__select">
+      {% for l in leagues %}
+        <option value="{{ l.id }}"{% if l.id == league.id %} selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endif %}
+
+<div class="row" style="gap:8px;margin-bottom:1rem;">
+  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='total') }}"
+     class="btn btn--small {{ 'btn--primary' if view_kind == 'total' else 'btn--secondary' }}">Total points</a>
+  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='h2h') }}"
+     class="btn btn--small {{ 'btn--primary' if view_kind == 'h2h' else 'btn--secondary' }}">Head-to-head</a>
+</div>
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">No scores yet. The leaderboard fills in as phases reveal.</p>
+  {% else %}
+    {% for row in rows %}
+      <div class="row row--space leaderboard-row{% if row.is_self %} leaderboard-row--self{% endif %}"
+           style="padding:8px 0;border-bottom:1px solid var(--c-border);">
+        <div class="row" style="gap:12px;">
+          <span class="muted small tabular" style="min-width:1.5em;">{{ row.rank }}</span>
+          {% if row.is_self %}
+            <span>{{ row.username }} <span class="small muted">(you)</span></span>
+          {% elif friend_landing %}
+            <a href="{{ url_for('rounds.view_friend',
+                                season=friend_landing.season,
+                                round_number=friend_landing.round_number,
+                                username=row.username) }}"
+               style="color:var(--c-ink);text-decoration:none;border-bottom:1px solid var(--c-border);">
+              {{ row.username }}
+            </a>
+          {% else %}
+            <span>{{ row.username }}</span>
+          {% endif %}
+        </div>
+        <span class="tabular pill pill--p10">{{ row.score }}</span>
+      </div>
+    {% endfor %}
+  {% endif %}
+</section>
+
+{% if friend_landing %}
+  <p class="small muted">Tap a name to see their predictions for round {{ friend_landing.round_number }}.</p>
+{% endif %}
+{% endblock %}

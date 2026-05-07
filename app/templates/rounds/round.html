@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header, points_pill %}
+
+{% set rd = state.round_obj %}
+{% set sessions = state.sessions %}
+{% set drivers = state.drivers_by_id %}
+{% set scores = state.scores %}
+
+{# Helpers that lean on the route's pre-loaded state #}
+{% macro driver_for_car(car_number) %}
+  {%- for r in (sessions[SESSION_RACE].results if SESSION_RACE in sessions else []) -%}
+    {%- if r.car_number == car_number -%}{{ drivers[r.actual_driver_id]|driver_label }}{%- endif -%}
+  {%- endfor -%}
+{% endmacro %}
+
+{% macro pred_driver_label(driver_id) %}
+  {%- if driver_id and driver_id in drivers -%}
+    {{ drivers[driver_id]|driver_label }}
+  {%- else -%}—{%- endif -%}
+{% endmacro %}
+
+{% macro slot_actual(session_obj, position) %}
+  {%- if session_obj is none -%}
+    pending
+  {%- else -%}
+    {%- for r in session_obj.results -%}
+      {%- if r.position == position -%}
+        {{ drivers[r.actual_driver_id]|driver_label }}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif -%}
+{% endmacro %}
+
+
+{% block content %}
+{{ round_header(rd, prev_round=prev_round, next_round=next_round) }}
+
+{% if not is_self %}
+  <p class="muted small" style="text-align:center;">
+    Viewing <strong>{{ viewed_user.username }}</strong>'s round
+    · <a href="{{ url_for('rounds.view', season=rd.season, round_number=rd.round_number) }}">your view</a>
+  </p>
+{% endif %}
+
+{# Status banner: live during a session, pending while we wait on results #}
+{% set in_progress = sessions.values() | selectattr('status.value', 'equalto', 'in_progress') | list %}
+{% set pending = sessions.values() | selectattr('status.value', 'equalto', 'pending_results') | list %}
+{% if in_progress %}
+  <div class="status-banner status-banner--live">
+    <span class="status-banner__dot"></span>
+    Session in progress — points land once it's official.
+  </div>
+{% elif pending %}
+  <div class="status-banner status-banner--pending">
+    Results pending. The worker checks every {{ config['RESULTS_POLL_INTERVAL_MINUTES'] }} minutes.
+  </div>
+{% endif %}
+
+<div class="row row--space" style="margin-bottom:1rem;">
+  <div class="muted small">
+    {% if state.is_locked %}
+      Locked
+    {% else %}
+      Open until {{ state.deadline|local_time('%a %d %b %H:%M') }}
+    {% endif %}
+  </div>
+  <div class="row">
+    <span class="small muted">Total</span>
+    <span class="pill pill--p10 tabular">{{ state.total_points }}</span>
+  </div>
+</div>
+
+{% if not state.is_locked and is_self %}
+  <a href="{{ url_for('predictions.edit') }}" class="btn btn--primary btn--block" style="margin-bottom:1rem;">
+    Edit predictions
+  </a>
+{% endif %}
+
+
+{# ---- Sprint phase ---- #}
+{% if rd.weekend_type.value == 'sprint' %}
+<section class="card">
+  <div class="row row--space">
+    <h3>Sprint Race</h3>
+    {% set sr = sessions.get(SESSION_SPRINT_RACE) %}
+    <span class="{{ (sr.status if sr else None)|session_status_class }}">
+      {{ (sr.status if sr else None)|session_status_label }}
+    </span>
+  </div>
+  <div class="phase-grid">
+    {% for pos in [1, 2, 3] %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">Sprint P{{ pos }}</div>
+        <div class="pred-row__predicted">
+          {{ pred_driver_label(state.sprint_top3.get(pos).predicted_driver_id if state.sprint_top3.get(pos) else None) }}
+        </div>
+        <div class="pred-row__actual small muted">{{ slot_actual(sr, pos) }}</div>
+        <div class="pred-row__points">
+          {{ points_pill(scores[(PT_SPRINT_TOP3, pos)].points if (PT_SPRINT_TOP3, pos) in scores else None) }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+
+{# ---- Qualifying phase ---- #}
+<section class="card">
+  <div class="row row--space">
+    <h3>Qualifying</h3>
+    {% set quali = sessions.get(SESSION_QUALI) %}
+    <span class="{{ (quali.status if quali else None)|session_status_class }}">
+      {{ (quali.status if quali else None)|session_status_label }}
+    </span>
+  </div>
+  <div class="phase-grid">
+    <div class="pred-row">
+      <div class="pred-row__label small muted">Pole time</div>
+      <div class="pred-row__predicted tabular">
+        {{ state.pole_time.predicted_time_ms|pole_time if state.pole_time else '—' }}
+      </div>
+      <div class="pred-row__actual small muted tabular">
+        {{ quali.pole_time_ms|pole_time if quali and quali.pole_time_ms else '' }}
+      </div>
+      <div class="pred-row__points">
+        {{ points_pill(scores[(PT_POLE_TIME, None)].points if (PT_POLE_TIME, None) in scores else None) }}
+      </div>
+    </div>
+    {% for pos in [1, 2, 3] %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">Quali P{{ pos }}</div>
+        <div class="pred-row__predicted">
+          {{ pred_driver_label(state.quali_top3.get(pos).predicted_driver_id if state.quali_top3.get(pos) else None) }}
+        </div>
+        <div class="pred-row__actual small muted">{{ slot_actual(quali, pos) }}</div>
+        <div class="pred-row__points">
+          {{ points_pill(scores[(PT_QUALI_TOP3, pos)].points if (PT_QUALI_TOP3, pos) in scores else None) }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+
+{# ---- Race phase ---- #}
+<section class="card">
+  <div class="row row--space">
+    <h3>Race</h3>
+    {% set race = sessions.get(SESSION_RACE) %}
+    <span class="{{ (race.status if race else None)|session_status_class }}">
+      {{ (race.status if race else None)|session_status_label }}
+    </span>
+  </div>
+  <div class="phase-grid">
+    {% for pos in range(1, 11) %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">Race P{{ pos }}</div>
+        <div class="pred-row__predicted">
+          {{ pred_driver_label(state.top10.get(pos).predicted_driver_id if state.top10.get(pos) else None) }}
+        </div>
+        <div class="pred-row__actual small muted">{{ slot_actual(race, pos) }}</div>
+        <div class="pred-row__points">
+          {{ points_pill(scores[(PT_RACE_TOP10, pos)].points if (PT_RACE_TOP10, pos) in scores else None) }}
+        </div>
+      </div>
+    {% endfor %}
+    <div class="pred-row">
+      <div class="pred-row__label small muted">Fastest lap</div>
+      <div class="pred-row__predicted">
+        {{ pred_driver_label(state.fastest_lap.predicted_driver_id if state.fastest_lap else None) }}
+      </div>
+      <div class="pred-row__actual small muted">
+        {{ drivers[race.fastest_lap_driver_id]|driver_label if race and race.fastest_lap_driver_id else '' }}
+      </div>
+      <div class="pred-row__points">
+        {{ points_pill(scores[(PT_FASTEST_LAP, None)].points if (PT_FASTEST_LAP, None) in scores else None) }}
+      </div>
+    </div>
+    <div class="pred-row">
+      <div class="pred-row__label small muted">DNFs</div>
+      <div class="pred-row__predicted tabular">
+        {{ state.dnf_count.predicted_count if state.dnf_count else '—' }}
+      </div>
+      <div class="pred-row__actual small muted tabular">
+        {{ race.dnf_count if race and race.dnf_count is not none else '' }}
+      </div>
+      <div class="pred-row__points">
+        {{ points_pill(scores[(PT_DNF_COUNT, None)].points if (PT_DNF_COUNT, None) in scores else None) }}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

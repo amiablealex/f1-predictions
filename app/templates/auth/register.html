@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-page">
+  <h1>Create account</h1>
+  <p class="auth-page__subtitle">Pick a display name your league-mates will recognise.</p>
+
+  <form method="post" novalidate class="form" action="{{ url_for('auth.register') }}">
+    {{ form.hidden_tag() }}
+
+    <div class="field">
+      <label class="field__label" for="email">{{ form.email.label.text }}</label>
+      {{ form.email(id="email", class_="field__input", autocomplete="email") }}
+      {% for err in form.email.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="username">{{ form.username.label.text }}</label>
+      {{ form.username(id="username", class_="field__input", autocomplete="nickname") }}
+      {% for err in form.username.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="password">{{ form.password.label.text }}</label>
+      {{ form.password(id="password", class_="field__input", autocomplete="new-password") }}
+      {% for err in form.password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="confirm_password">{{ form.confirm_password.label.text }}</label>
+      {{ form.confirm_password(id="confirm_password", class_="field__input", autocomplete="new-password") }}
+      {% for err in form.confirm_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    {{ form.submit(class_="btn btn--primary btn--block") }}
+  </form>
+
+  <div class="auth-page__links">
+    Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a>
+  </div>
+</section>
+{% endblock %}

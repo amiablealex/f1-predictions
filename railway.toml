@@ -1,0 +1,13 @@
+# Railway deployment config.
+# This file describes the build, but the two services (web + worker) must be
+# created separately in the Railway UI, both pointing at this repo.
+#   - Web service: start command = `gunicorn wsgi:app --workers 2 --timeout 60 --bind 0.0.0.0:$PORT`
+#   - Worker service: start command = `python -m worker.scheduler`
+# Both services share the same Postgres plugin and environment variables.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ league.name }}</h1>
+<p class="small muted">
+  Invite code: <strong class="tabular">{{ league.invite_code }}</strong>
+  {% if is_admin %}· You're the admin.{% endif %}
+</p>
+
+<div class="row" style="gap:8px;margin-bottom:1rem;">
+  <a href="{{ url_for('leaderboard.view', league_id=league.id) }}" class="btn btn--primary">Leaderboard</a>
+</div>
+
+<section class="card">
+  <h3>Members ({{ members|length }})</h3>
+  {% for m in members %}
+    <div class="row row--space" style="padding:6px 0;border-bottom:1px solid var(--c-border);">
+      <span>{{ m.user.username }}</span>
+      <span class="small muted">
+        {% if m.user_id == league.created_by_id %}admin{% endif %}
+      </span>
+      {% if is_admin and m.user_id != league.created_by_id %}
+        <form method="post" action="{{ url_for('leagues.remove_member', league_id=league.id, user_id=m.user_id) }}"
+              style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">Remove</button>
+        </form>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+
+{% if is_admin %}
+<section class="card">
+  <h3>League settings</h3>
+  <form method="post" action="{{ url_for('leagues.rename', league_id=league.id) }}" class="form">
+    {{ rename_form.hidden_tag() }}
+    <div class="field">
+      <label class="field__label">Rename</label>
+      {{ rename_form.name(class_="field__input") }}
+    </div>
+    {{ rename_form.submit(class_="btn btn--secondary") }}
+  </form>
+
+  <div class="divider"></div>
+
+  <form method="post" action="{{ url_for('leagues.delete_league', league_id=league.id) }}"
+        onsubmit="return confirm('Delete this league? This is permanent.');">
+    {{ bare_csrf.hidden_tag() }}
+    <button type="submit" class="btn btn--danger">Delete league</button>
+  </form>
+</section>
+{% else %}
+<section class="card">
+  <form method="post" action="{{ url_for('leagues.leave', league_id=league.id) }}">
+    {{ bare_csrf.hidden_tag() }}
+    <button type="submit" class="btn btn--secondary">Leave league</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

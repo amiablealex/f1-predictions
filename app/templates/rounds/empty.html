@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card" style="text-align:center;">
+  <h2>Nothing on the calendar</h2>
+  <p class="muted">
+    The schedule hasn't synced yet. The worker tries every
+    {{ config['SCHEDULE_SYNC_INTERVAL_HOURS'] }} hours; an admin can also
+    trigger it manually.
+  </p>
+</section>
+{% endblock %}

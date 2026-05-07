@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header, driver_select %}
+
+{% block content %}
+{{ round_header(round_obj) }}
+
+<p class="muted small">
+  Locks at <strong>{{ round_obj.predictions_deadline|local_time('%a %d %b %H:%M') }}</strong>.
+  Whatever's saved at that point is what gets scored.
+</p>
+
+<form method="post" action="{{ url_for('predictions.submit') }}" class="form predictions-form">
+  {{ form.hidden_tag() }}
+
+  {% if is_sprint %}
+    <section class="card">
+      <h3>Sprint Race — Top 3</h3>
+      {% for pos in [1, 2, 3] %}
+        <div class="field">
+          <label class="field__label">P{{ pos }}</label>
+          {{ driver_select("sprint_top3_" ~ pos, choices, selected_id=existing.get("sprint_top3_" ~ pos)) }}
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  <section class="card">
+    <h3>Qualifying</h3>
+    <div class="field">
+      <label class="field__label">Pole lap time (e.g. 1:23.456)</label>
+      <input type="text" name="pole_time" class="field__input"
+             value="{{ existing.get('pole_time', '') }}"
+             placeholder="M:SS.mmm"
+             autocomplete="off">
+    </div>
+    {% for pos in [1, 2, 3] %}
+      <div class="field">
+        <label class="field__label">P{{ pos }}</label>
+        {{ driver_select("quali_top3_" ~ pos, choices, selected_id=existing.get("quali_top3_" ~ pos)) }}
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h3>Race — Top 10</h3>
+    {% for pos in range(1, 11) %}
+      <div class="field">
+        <label class="field__label">P{{ pos }}</label>
+        {{ driver_select("top10_" ~ pos, choices, selected_id=existing.get("top10_" ~ pos)) }}
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h3>Extras</h3>
+    <div class="field">
+      <label class="field__label">Fastest lap</label>
+      {{ driver_select("fastest_lap", choices, selected_id=existing.get("fastest_lap")) }}
+    </div>
+    <div class="field">
+      <label class="field__label">Number of DNFs</label>
+      <input type="number" name="dnf_count" class="field__input"
+             min="0" max="20"
+             value="{{ existing.get('dnf_count', '') }}"
+             autocomplete="off">
+    </div>
+  </section>
+
+  <div class="sticky-save">
+    <button type="submit" class="btn btn--primary btn--block">Save predictions</button>
+    <p class="small muted xs" style="text-align:center;margin:6px 0 0 0;">
+      Editable until the deadline. Empty fields score zero.
+    </p>
+  </div>
+</form>
+{% endblock %}

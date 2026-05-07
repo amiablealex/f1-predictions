@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="auth-page">
+  <h1>Sign in</h1>
+  <p class="auth-page__subtitle">Welcome back.</p>
+
+  <form method="post" novalidate class="form" action="{{ url_for('auth.login') }}">
+    {{ form.hidden_tag() }}
+
+    <div class="field">
+      <label class="field__label" for="email">{{ form.email.label.text }}</label>
+      {{ form.email(id="email", class_="field__input", autocomplete="email", autofocus=True) }}
+      {% for err in form.email.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="password">{{ form.password.label.text }}</label>
+      {{ form.password(id="password", class_="field__input", autocomplete="current-password") }}
+      {% for err in form.password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+
+    <label class="field__check">
+      {{ form.remember() }} {{ form.remember.label.text }}
+    </label>
+
+    {{ form.submit(class_="btn btn--primary btn--block") }}
+  </form>
+
+  <div class="auth-page__links stack">
+    <a href="{{ url_for('auth.forgot_password') }}">Forgot your password?</a>
+    <a href="{{ url_for('auth.register') }}">Create an account</a>
+  </div>
+</section>
+{% endblock %}

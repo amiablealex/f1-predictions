@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="{{ palette.background }}">
+  <title>{% if title %}{{ title }} · {% endif %}F1 Predictions</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+
+  {# Palette is the single source of truth; pulled from config.py and exposed
+     as CSS variables so all stylesheets reference one place. #}
+  <style>
+    :root {
+      --c-bg: {{ palette.background }};
+      --c-surface: {{ palette.surface }};
+      --c-surface-alt: {{ palette.surface_alt }};
+      --c-ink: {{ palette.ink }};
+      --c-ink-muted: {{ palette.ink_muted }};
+      --c-border: {{ palette.border }};
+      --c-accent: {{ palette.accent }};
+      --c-points-10: {{ palette.points_10 }};
+      --c-points-5:  {{ palette.points_5 }};
+      --c-points-2:  {{ palette.points_2 }};
+      --c-points-0:  {{ palette.points_0 }};
+      --c-status-upcoming:    {{ palette.status_upcoming }};
+      --c-status-in-progress: {{ palette.status_in_progress }};
+      --c-status-pending:     {{ palette.status_pending }};
+      --c-status-completed:   {{ palette.status_completed }};
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="frame">
+    <header class="frame__header">
+      {% if current_user.is_authenticated %}
+        <button class="menu-btn" aria-label="Open menu" aria-expanded="false" id="menu-btn" type="button">
+          <span class="menu-btn__bar"></span>
+          <span class="menu-btn__bar"></span>
+          <span class="menu-btn__bar"></span>
+        </button>
+      {% else %}
+        <span class="menu-btn menu-btn--placeholder" aria-hidden="true"></span>
+      {% endif %}
+      <a class="frame__title" href="{{ url_for('index') }}">F1 Predictions</a>
+      <span class="frame__header-spacer" aria-hidden="true"></span>
+    </header>
+
+    {% if current_user.is_authenticated %}
+      <nav class="drawer" id="drawer" aria-hidden="true">
+        <ul class="drawer__list">
+          <li><a href="{{ url_for('predictions.edit') }}" class="drawer__link">Predictions</a></li>
+          <li><a href="{{ url_for('rounds.current') }}" class="drawer__link">Rounds</a></li>
+          <li><a href="{{ url_for('leaderboard.index') }}" class="drawer__link">Leaderboard</a></li>
+          <li><a href="{{ url_for('leagues.index') }}" class="drawer__link">Leagues</a></li>
+          <li><a href="{{ url_for('rules.index') }}" class="drawer__link">How to play</a></li>
+          <li><a href="{{ url_for('auth.account') }}" class="drawer__link">Account</a></li>
+          {% if current_user.is_admin %}
+            <li><a href="{{ url_for('admin.dashboard') }}" class="drawer__link">Admin</a></li>
+          {% endif %}
+          <li>
+            <form action="{{ url_for('auth.logout') }}" method="post" class="drawer__signout-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="drawer__link drawer__link--button">Sign out</button>
+            </form>
+          </li>
+        </ul>
+      </nav>
+      <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
+    {% endif %}
+
+    <main class="frame__main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack" role="status" aria-live="polite">
+            {% for category, msg in messages %}
+              <div class="flash flash--{{ category }}">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% if current_user.is_authenticated %}
+    <script>
+      (function () {
+        var btn = document.getElementById('menu-btn');
+        var drawer = document.getElementById('drawer');
+        var scrim = document.getElementById('drawer-scrim');
+        if (!btn || !drawer) return;
+
+        function setOpen(open) {
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+          drawer.classList.toggle('drawer--open', open);
+          scrim.classList.toggle('drawer-scrim--visible', open);
+          document.body.classList.toggle('body--locked', open);
+        }
+
+        btn.addEventListener('click', function () {
+          var isOpen = drawer.classList.contains('drawer--open');
+          setOpen(!isOpen);
+        });
+        scrim.addEventListener('click', function () { setOpen(false); });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') setOpen(false);
+        });
+      })();
+    </script>
+  {% endif %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>How to play</h1>
+<p class="muted small">Predict each round's results. Closer to the truth = more points.</p>
+
+<section class="card">
+  <h3>The basics</h3>
+  <p>Every Grand Prix is a "round". For each round you predict a set of outcomes; once the deadline passes, your predictions lock and you watch as points roll in across the weekend.</p>
+  <p class="small muted">Deadline: {{ deadline_offset_minutes }} minutes before the first scoring session of the weekend (sprint qualifying on a sprint weekend, otherwise main qualifying).</p>
+</section>
+
+<section class="card">
+  <h3>Race — Top 10</h3>
+  <p>Pick the drivers you think will finish in positions 1 through 10.</p>
+  <ul>
+    <li><span class="pill pill--p10">+{{ cfg.race_top10_correct }}</span> exact position</li>
+    <li><span class="pill pill--p5">+{{ cfg.race_top10_one_off }}</span> off by one</li>
+    <li><span class="pill pill--p2">+{{ cfg.race_top10_two_off }}</span> off by two</li>
+    <li><span class="pill pill--p0">0</span> further off, or DNF</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Qualifying — Top 3</h3>
+  <ul>
+    <li><span class="pill pill--p10">+{{ cfg.quali_top3_correct }}</span> exact position</li>
+    <li><span class="pill pill--p5">+{{ cfg.quali_top3_one_off }}</span> off by one</li>
+    <li><span class="pill pill--p0">0</span> further off</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Pole lap time</h3>
+  <p>Predict the pole-sitter's lap time as exactly as you can.</p>
+  <ul>
+    {% for bucket in cfg.pole_time_buckets %}
+      <li>
+        <span class="pill {% if bucket.points >= 10 %}pill--p10{% elif bucket.points >= 5 %}pill--p5{% else %}pill--p2{% endif %}">+{{ bucket.points }}</span>
+        within {{ bucket.within_seconds }}s of the actual pole time
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Sprint weekends</h3>
+  <p class="small muted">
+    Predictions on a sprint weekend lock 1 hour before sprint qualifying on Friday.
+  </p>
+  <ul>
+    <li><strong>Sprint race top 3:</strong> <span class="pill pill--p5">+{{ cfg.sprint_top3_correct }}</span> exact, <span class="pill pill--p2">+{{ cfg.sprint_top3_one_off }}</span> off by one.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Race extras</h3>
+  <ul>
+    <li><strong>Fastest lap:</strong> <span class="pill pill--p10">+{{ cfg.fastest_lap_correct }}</span> if you pick the right driver.</li>
+    <li><strong>DNF count:</strong> <span class="pill pill--p10">+{{ cfg.dnf_count_correct }}</span> exact, <span class="pill pill--p5">+{{ cfg.dnf_count_one_off }}</span> off by one.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Substitutions</h3>
+  <p class="small muted">If a driver is replaced for a round (illness, reserve called up), points are awarded by seat — i.e. picking Hamilton means picking "whoever drives car 44 this round."</p>
+</section>
+
+<section class="card">
+  <h3>Leaderboards</h3>
+  <ul>
+    <li><strong>Total points:</strong> sum of every prediction across the season.</li>
+    <li><strong>Head-to-head:</strong> 1 point per round won within your league. Ties share the win.</li>
+  </ul>
+</section>
+{% endblock %}

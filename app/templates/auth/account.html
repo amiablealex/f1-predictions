@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Account</h1>
+<p class="muted small">Signed in as <strong>{{ current_user.username }}</strong> · {{ current_user.email }}</p>
+
+<section class="card">
+  <h3>Display name</h3>
+  <p class="card__hint">This is the name shown on leaderboards.</p>
+  <form method="post" action="{{ url_for('auth.change_username') }}" class="form">
+    {{ username_form.hidden_tag() }}
+    <div class="field">
+      <label class="field__label" for="username">{{ username_form.username.label.text }}</label>
+      {{ username_form.username(id="username", class_="field__input") }}
+      {% for err in username_form.username.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    {{ username_form.submit(class_="btn btn--secondary") }}
+  </form>
+</section>
+
+<section class="card">
+  <h3>Email</h3>
+  <p class="card__hint">Used for sign-in and password reset only.</p>
+  <form method="post" action="{{ url_for('auth.change_email') }}" class="form">
+    {{ email_form.hidden_tag() }}
+    <div class="field">
+      <label class="field__label" for="new_email">{{ email_form.email.label.text }}</label>
+      {{ email_form.email(id="new_email", class_="field__input", autocomplete="email") }}
+      {% for err in email_form.email.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      <label class="field__label" for="email_current_password">{{ email_form.current_password.label.text }}</label>
+      {{ email_form.current_password(id="email_current_password", class_="field__input", autocomplete="current-password") }}
+      {% for err in email_form.current_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    {{ email_form.submit(class_="btn btn--secondary") }}
+  </form>
+</section>
+
+<section class="card">
+  <h3>Password</h3>
+  <form method="post" action="{{ url_for('auth.change_password') }}" class="form">
+    {{ password_form.hidden_tag() }}
+    <div class="field">
+      <label class="field__label" for="pw_current">{{ password_form.current_password.label.text }}</label>
+      {{ password_form.current_password(id="pw_current", class_="field__input", autocomplete="current-password") }}
+      {% for err in password_form.current_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      <label class="field__label" for="pw_new">{{ password_form.new_password.label.text }}</label>
+      {{ password_form.new_password(id="pw_new", class_="field__input", autocomplete="new-password") }}
+      {% for err in password_form.new_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      <label class="field__label" for="pw_confirm">{{ password_form.confirm_password.label.text }}</label>
+      {{ password_form.confirm_password(id="pw_confirm", class_="field__input", autocomplete="new-password") }}
+      {% for err in password_form.confirm_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    {{ password_form.submit(class_="btn btn--secondary") }}
+  </form>
+</section>
+
+<section class="card">
+  <h3>Delete account</h3>
+  <p class="card__hint">This is permanent. Your predictions and league memberships will be removed.</p>
+  <form method="post" action="{{ url_for('auth.delete_account') }}" class="form">
+    {{ delete_form.hidden_tag() }}
+    <div class="field">
+      <label class="field__label" for="del_pw">{{ delete_form.current_password.label.text }}</label>
+      {{ delete_form.current_password(id="del_pw", class_="field__input", autocomplete="current-password") }}
+      {% for err in delete_form.current_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      <label class="field__label" for="del_phrase">{{ delete_form.confirm_phrase.label.text }}</label>
+      {{ delete_form.confirm_phrase(id="del_phrase", class_="field__input", autocomplete="off") }}
+      {% for err in delete_form.confirm_phrase.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
+    </div>
+    {{ delete_form.submit(class_="btn btn--danger") }}
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header %}
+{% block content %}
+{{ round_header(round_obj) }}
+<section class="card" style="text-align:center;">
+  <h3>Lineup not confirmed</h3>
+  <p class="muted">
+    We don't know who's driving what yet. Predictions open as soon as we do.
+  </p>
+</section>
+{% endblock %}
