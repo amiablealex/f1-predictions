@@ -205,7 +205,7 @@ def format_lap_time(ms: int | None) -> str:
 # A finishing status is "classified" if it's "Finished" or "+N Lap(s)".
 # Anything else (mechanical retirement, accident, DNS, DSQ) is treated as a
 # DNF for DNF-count scoring and as unclassified for position scoring.
-_CLASSIFIED_STATUS_PATTERN = re.compile(r"^(Finished|\+\d+\s+Laps?)$", re.IGNORECASE)
+_CLASSIFIED_STATUS_PATTERN = re.compile(r"^(Finished|Lapped|\+\d+\s+Laps?)$", re.IGNORECASE)
 
 
 def is_status_classified(status: str) -> bool:

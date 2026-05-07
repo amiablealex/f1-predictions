@@ -87,6 +87,7 @@ def test_country_mapping():
     "status,expected",
     [
         ("Finished", True),
+        ("Lapped", True),
         ("+1 Lap", True),
         ("+2 Laps", True),
         ("+10 Laps", True),
