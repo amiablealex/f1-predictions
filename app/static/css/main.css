@@ -471,3 +471,24 @@ p { margin: 0 0 var(--space-3) 0; }
   /* Above the iOS home-indicator safe area */
   padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
 }
+
+/* ----------------------------------------------------------- Field error state */
+
+.field--error select,
+.field--error .field__input {
+  border-color: #b8442c;
+  background: rgba(184, 68, 44, 0.04);
+}
+.field__error {
+  font-size: var(--fs-xs, 0.75rem);
+  color: #b8442c;
+  margin-top: 4px;
+}
+
+/* Disabled submit (used while duplicates exist on the predictions form) */
+.btn[disabled],
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}

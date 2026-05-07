@@ -32,7 +32,7 @@
   <select name="{{ name }}" class="field__select">
     <option value="">{{ placeholder }}</option>
     {% for c in choices %}
-      <option value="{{ c.driver_id }}"{% if selected_id == c.driver_id %} selected{% endif %}>
+      <option value="{{ c.driver_id }}"{% if selected_id is not none and selected_id|string == c.driver_id|string %} selected{% endif %}>
         {{ c.label }}
       </option>
     {% endfor %}

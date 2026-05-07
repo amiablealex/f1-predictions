@@ -105,7 +105,18 @@ def submit():
     if errors:
         for e in errors:
             flash(e, "error")
-        return redirect(url_for("predictions.edit"))
+        # Re-render the form with the user's submitted values so they
+        # don't lose anything on validation error (defense-in-depth —
+        # client-side JS catches most of these before submit).
+        return render_template(
+            "predictions/edit.html",
+            round_obj=rd,
+            choices=choices,
+            existing=request.form.to_dict(),
+            is_sprint=is_sprint,
+            form=form,
+            title="Predictions",
+        )
 
     _save_predictions(rd.id, current_user.id, payload, is_sprint)
     db.session.commit()
