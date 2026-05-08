@@ -1,11 +1,28 @@
 {# Reusable macros shared across views. #}
 
-{% macro round_header(round_obj, prev_round=None, next_round=None) %}
+{% macro round_header(round_obj, prev_round=None, next_round=None, friend_username=None) %}
+  {% if friend_username %}
+    {% set prev_url = url_for('rounds.view_friend',
+                              season=prev_round.season,
+                              round_number=prev_round.round_number,
+                              username=friend_username) if prev_round %}
+    {% set next_url = url_for('rounds.view_friend',
+                              season=next_round.season,
+                              round_number=next_round.round_number,
+                              username=friend_username) if next_round %}
+  {% else %}
+    {% set prev_url = url_for('rounds.view',
+                              season=prev_round.season,
+                              round_number=prev_round.round_number) if prev_round %}
+    {% set next_url = url_for('rounds.view',
+                              season=next_round.season,
+                              round_number=next_round.round_number) if next_round %}
+  {% endif %}
+
   <div class="round-header{% if not prev_round and not next_round %} round-header--no-nav{% endif %}">
     {% if prev_round or next_round %}
       {% if prev_round %}
-        <a href="{{ url_for('rounds.view', season=prev_round.season, round_number=prev_round.round_number) }}"
-           class="round-header__nav" aria-label="Previous round">‹</a>
+        <a href="{{ prev_url }}" class="round-header__nav" aria-label="Previous round">‹</a>
       {% else %}
         <span class="round-header__nav round-header__nav--disabled" aria-hidden="true">‹</span>
       {% endif %}
@@ -22,8 +39,7 @@
     </div>
     {% if prev_round or next_round %}
       {% if next_round %}
-        <a href="{{ url_for('rounds.view', season=next_round.season, round_number=next_round.round_number) }}"
-           class="round-header__nav" aria-label="Next round">›</a>
+        <a href="{{ next_url }}" class="round-header__nav" aria-label="Next round">›</a>
       {% else %}
         <span class="round-header__nav round-header__nav--disabled" aria-hidden="true">›</span>
       {% endif %}

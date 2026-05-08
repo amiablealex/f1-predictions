@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ season }} season</h1>
+
+{% if not is_self %}
+  <p class="muted small" style="text-align:center;">
+    Viewing <strong>{{ viewed_user.username }}</strong>'s rounds
+    · <a href="{{ url_for('rounds.list') }}">your view</a>
+  </p>
+{% endif %}
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">
+      {% if is_self %}
+        Schedule hasn't synced yet. Check back shortly.
+      {% else %}
+        No locked rounds yet. Predictions become visible once a round locks.
+      {% endif %}
+    </p>
+  {% else %}
+    {% for row in rows %}
+      {% if is_self %}
+        {% set href = url_for('rounds.view',
+                              season=row.round.season,
+                              round_number=row.round.round_number) %}
+      {% else %}
+        {% set href = url_for('rounds.view_friend',
+                              season=row.round.season,
+                              round_number=row.round.round_number,
+                              username=viewed_user.username) %}
+      {% endif %}
+      <a href="{{ href }}" class="rounds-list-row">
+        <div class="rounds-list-row__main">
+          <div class="rounds-list-row__name">
+            {% if row.round.country_code %}{{ row.round.country_code|country_flag }}{% endif %}
+            R{{ row.round.round_number }} · {{ row.round.gp_name }}
+          </div>
+          {% if row.round.circuit_name %}
+            <div class="rounds-list-row__sub small muted">{{ row.round.circuit_name }}</div>
+          {% endif %}
+        </div>
+        <div class="rounds-list-row__right">
+          <span class="{{ row.status_class }}">{{ row.status_label }}</span>
+          {% if row.points is not none %}
+            <span class="pill pill--p10 tabular">{{ row.points }}</span>
+          {% else %}
+            <span class="muted small tabular">—</span>
+          {% endif %}
+        </div>
+      </a>
+    {% endfor %}
+  {% endif %}
+</section>
+{% endblock %}

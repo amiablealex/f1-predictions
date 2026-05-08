@@ -33,7 +33,7 @@
 
 
 {% block content %}
-{{ round_header(rd, prev_round=prev_round, next_round=next_round) }}
+{{ round_header(rd, prev_round=prev_round, next_round=next_round, friend_username=friend_username) }}
 
 {% if not is_self %}
   <p class="muted small" style="text-align:center;">

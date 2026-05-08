@@ -41,16 +41,11 @@
           <span class="muted small tabular" style="min-width:1.5em;">{{ row.rank }}</span>
           {% if row.is_self %}
             <span>{{ row.username }} <span class="small muted">(you)</span></span>
-          {% elif friend_landing %}
-            <a href="{{ url_for('rounds.view_friend',
-                                season=friend_landing.season,
-                                round_number=friend_landing.round_number,
-                                username=row.username) }}"
+          {% else %}
+            <a href="{{ url_for('rounds.list_friend', username=row.username) }}"
                class="leaderboard-row__link">
               {{ row.username }}
             </a>
-          {% else %}
-            <span>{{ row.username }}</span>
           {% endif %}
         </div>
 
@@ -76,9 +71,8 @@
   {% endif %}
 </section>
 
-{% if friend_landing %}
-  <p class="small muted">
-    Tap a name to see their predictions, or tap their last score to jump to that round's breakdown.
-  </p>
-{% endif %}
+<p class="small muted">
+  Tap a name to see their season, or a last score to jump to that round.
+</p>
+
 {% endblock %}

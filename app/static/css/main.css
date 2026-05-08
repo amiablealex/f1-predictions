@@ -536,3 +536,21 @@ p { margin: 0 0 var(--space-3) 0; }
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ----------------------------------------------------------- Rounds list */
+
+.rounds-list-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--c-border);
+  text-decoration: none;
+  color: inherit;
+}
+.rounds-list-row:last-child { border-bottom: none; }
+.rounds-list-row:hover { background: var(--c-surface-alt); }
+.rounds-list-row__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rounds-list-row__name { font-weight: 500; }
+.rounds-list-row__right { display: flex; align-items: center; gap: var(--space-3); }

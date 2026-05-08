@@ -77,20 +77,29 @@ def get_round_by_number(season: int, round_number: int) -> Round | None:
     )
 
 
-def get_neighbour_rounds(round_obj: Round) -> tuple[Round | None, Round | None]:
-    """Return (previous, next) rounds in the same season, or (None, None)."""
-    previous = (
+def get_neighbour_rounds(
+    round_obj: Round, *, locked_only: bool = False
+) -> tuple[Round | None, Round | None]:
+    """Return (previous, next) rounds in the same season, or (None, None).
+
+    ``locked_only`` excludes unlocked rounds — used by the friend's view so
+    navigation can't reveal unsubmitted predictions.
+    """
+    qprev = (
         db.session.query(Round)
         .filter(Round.season == round_obj.season,
                 Round.round_number < round_obj.round_number)
-        .order_by(Round.round_number.desc()).first()
     )
-    nxt = (
+    qnxt = (
         db.session.query(Round)
         .filter(Round.season == round_obj.season,
                 Round.round_number > round_obj.round_number)
-        .order_by(Round.round_number.asc()).first()
     )
+    if locked_only:
+        qprev = qprev.filter(Round.predictions_locked.is_(True))
+        qnxt = qnxt.filter(Round.predictions_locked.is_(True))
+    previous = qprev.order_by(Round.round_number.desc()).first()
+    nxt = qnxt.order_by(Round.round_number.asc()).first()
     return previous, nxt
 
 
@@ -321,6 +330,28 @@ def local_time(dt: datetime | None, fmt: str = "%a %d %b %H:%M") -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(tz).strftime(fmt)
+
+
+def round_status_summary(round_obj: Round, now: datetime | None = None) -> tuple[str, str]:
+    """Return (label, css-class) for displaying a round in the season list.
+
+    Combines round.state with the predictions-locked flag to pick a pill
+    style. Labels stay terse — meant to scan quickly.
+    """
+    now = now or datetime.now(timezone.utc)
+    if round_obj.state == RoundState.COMPLETED:
+        return ("completed", "pill pill--status-completed")
+    if round_obj.state == RoundState.IN_PROGRESS:
+        return ("live", "pill pill--status-in-progress")
+    # UPCOMING territory
+    if round_obj.predictions_locked:
+        return ("locked", "pill pill--status-pending")
+    if round_obj.predictions_deadline and round_obj.predictions_deadline <= now:
+        # Deadline has passed but worker hasn't flipped the lock yet.
+        return ("locked", "pill pill--status-pending")
+    if round_obj.predictions_deadline:
+        return ("open", "pill pill--status-upcoming")
+    return ("scheduled", "pill pill--status-upcoming")
 
 
 def most_recent_visible_round(season: int) -> Round | None:
