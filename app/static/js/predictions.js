@@ -1,14 +1,16 @@
-// Predictions form: client-side validation for duplicate drivers
-// within a constrained group. Drivers can repeat across groups (e.g.
-// quali P1 and race P3 can be the same driver) but not within the
-// same group (e.g. race P1 and race P3 must differ).
+// Predictions form: client-side enhancements.
+//   1. Duplicate-driver validation within constrained groups (race top 10,
+//      quali top 3, sprint top 3). Drivers may repeat across groups but
+//      not within one.
+//   2. Dirty-state badge that reflects whether the form differs from
+//      what's currently saved on the server.
 
 (function () {
   const form = document.querySelector('.predictions-form');
   if (!form) return;
 
-  // Each group is a set of <select> elements that must hold distinct
-  // drivers. The `prefix` matches the input `name` attribute.
+  // ----- Duplicate-driver validation -----------------------------------
+
   const GROUPS = [
     { prefix: 'top10_',         max: 10, label: 'race top 10' },
     { prefix: 'quali_top3_',    max: 3,  label: 'quali top 3' },
@@ -77,11 +79,56 @@
     }
   }
 
-  // Wire up
-  form.querySelectorAll('select').forEach(sel => {
-    sel.addEventListener('change', validateAll);
-  });
-  // Initial pass — covers the case where the server re-rendered the
-  // form with a known-bad submission.
+  // ----- Dirty-state badge ---------------------------------------------
+
+  const badgeEl = form.querySelector('[data-form-badge]');
+  const statusEl = form.querySelector('[data-form-status]');
+  const hasSubmitted = statusEl && statusEl.dataset.hasSubmitted === 'true';
+
+  const BADGE = {
+    saved: { cls: 'pill pill--status-completed', text: 'Saved' },
+    dirty: { cls: 'pill pill--status-pending',   text: 'Unsaved changes' },
+    fresh: { cls: 'pill pill--status-upcoming',  text: 'New predictions' },
+  };
+
+  function snapshot() {
+    const data = {};
+    form.querySelectorAll('input[name], select[name]').forEach(el => {
+      if (el.type === 'hidden') return;
+      data[el.name] = el.value || '';
+    });
+    return data;
+  }
+
+  const initial = snapshot();
+
+  function isDirty() {
+    const current = snapshot();
+    const keys = new Set(Object.keys(initial).concat(Object.keys(current)));
+    for (const k of keys) {
+      if ((initial[k] || '') !== (current[k] || '')) return true;
+    }
+    return false;
+  }
+
+  function setBadge(state) {
+    if (!badgeEl) return;
+    const b = BADGE[state];
+    badgeEl.className = b.cls;
+    badgeEl.textContent = b.text;
+  }
+
+  function updateBadge() {
+    if (isDirty()) setBadge('dirty');
+    else if (hasSubmitted) setBadge('saved');
+    else setBadge('fresh');
+  }
+
+  // ----- Wire up -------------------------------------------------------
+
+  form.addEventListener('input',  () => { validateAll(); updateBadge(); });
+  form.addEventListener('change', () => { validateAll(); updateBadge(); });
+
   validateAll();
+  updateBadge();
 })();

@@ -5,7 +5,7 @@
 {{ round_header(round_obj) }}
 
 <p class="muted small">
-  Locks at <strong>{{ round_obj.predictions_deadline|local_time('%a %d %b %H:%M') }}</strong>.
+  Locks <strong>{{ round_obj.predictions_deadline|deadline_phrase }}</strong>.
   Whatever's saved at that point is what gets scored.
 </p>
 
@@ -67,11 +67,22 @@
   </section>
 
   <div class="sticky-save">
+    <div class="form-status"
+         data-form-status
+         data-has-submitted="{{ 'true' if existing else 'false' }}"
+         style="text-align:center;margin-bottom:8px;">
+      {% if existing %}
+        <span class="pill pill--status-completed" data-form-badge>Saved</span>
+      {% else %}
+        <span class="pill pill--status-upcoming" data-form-badge>New predictions</span>
+      {% endif %}
+    </div>
     <button type="submit" class="btn btn--primary btn--block">Save predictions</button>
     <p class="small muted xs" style="text-align:center;margin:6px 0 0 0;">
       Editable until the deadline. Empty fields score zero.
     </p>
   </div>
+
 </form>
 
 <script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>

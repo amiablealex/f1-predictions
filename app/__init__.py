@@ -119,6 +119,7 @@ def _register_jinja_helpers(app: Flask) -> None:
     """Make commonly-used helpers available in templates."""
     from app.utils import (
         country_flag,
+        deadline_phrase,
         driver_label,
         format_pole_time_ms,
         local_time,
@@ -132,6 +133,7 @@ def _register_jinja_helpers(app: Flask) -> None:
         return {"palette": app.config["PALETTE"]}
 
     app.jinja_env.filters["points_class"] = points_class
+    app.jinja_env.filters["deadline_phrase"] = deadline_phrase
     app.jinja_env.filters["session_status_class"] = session_status_class
     app.jinja_env.filters["session_status_label"] = session_status_label
     app.jinja_env.filters["pole_time"] = format_pole_time_ms

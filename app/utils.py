@@ -354,6 +354,31 @@ def round_status_summary(round_obj: Round, now: datetime | None = None) -> tuple
     return ("scheduled", "pill pill--status-upcoming")
 
 
+def deadline_phrase(dt: datetime | None, threshold_hours: int = 24) -> str:
+    """Render a deadline as a sentence-fitting phrase.
+
+    Within ``threshold_hours``, returns a relative form ('in 3 hours');
+    outside it, falls through to absolute local time prefixed with 'at'.
+    Designed to slot into 'Locks ___'.
+    """
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    secs = (dt - datetime.now(timezone.utc)).total_seconds()
+    if secs <= 0:
+        return "(passed)"
+    if secs < threshold_hours * 3600:
+        if secs < 60:
+            return "in under a minute"
+        if secs < 3600:
+            mins = int((secs + 59) // 60)  # ceil
+            return f"in {mins} minute{'s' if mins != 1 else ''}"
+        hours = int(round(secs / 3600))
+        return f"in {hours} hour{'s' if hours != 1 else ''}"
+    return f"at {local_time(dt)}"
+
+
 def most_recent_visible_round(season: int) -> Round | None:
     """The most recent round whose predictions are visible to others
     (i.e. locked). Used as the landing for the friend's-view click-through

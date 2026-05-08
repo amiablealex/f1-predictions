@@ -61,7 +61,7 @@
     {% if state.is_locked %}
       Locked
     {% else %}
-      Open until {{ state.deadline|local_time('%a %d %b %H:%M') }}
+      Locks {{ state.deadline|deadline_phrase }}
     {% endif %}
   </div>
   <div class="row">
