@@ -20,7 +20,7 @@ from wtforms.validators import (
 
 from app.extensions import db
 from app.models.user import User
-
+import re
 
 # -----------------------------------------------------------------------------
 # Custom validators
@@ -42,6 +42,16 @@ def _email_taken(email: str, exclude_user_id: int | None = None) -> bool:
         q = q.filter(User.id != exclude_user_id)
     return db.session.execute(q).first() is not None
 
+
+_DIGIT_RE = re.compile(r"\d")
+
+
+def _validate_password_strength(_form, field):
+    pw = field.data or ""
+    if len(pw) < 8:
+        raise ValidationError("At least 8 characters.")
+    if not _DIGIT_RE.search(pw):
+        raise ValidationError("Include at least one digit.")
 
 # -----------------------------------------------------------------------------
 # Registration
@@ -70,10 +80,7 @@ class RegisterForm(FlaskForm):
     )
     password = PasswordField(
         "Password",
-        validators=[
-            DataRequired(),
-            Length(min=8, message="At least 8 characters."),
-        ],
+        validators=[DataRequired(), _validate_password_strength],
     )
     confirm_password = PasswordField(
         "Confirm password",
@@ -118,7 +125,7 @@ class ForgotPasswordForm(FlaskForm):
 class ResetPasswordForm(FlaskForm):
     password = PasswordField(
         "New password",
-        validators=[DataRequired(), Length(min=8)],
+        validators=[DataRequired(), _validate_password_strength],
     )
     confirm_password = PasswordField(
         "Confirm new password",
@@ -164,7 +171,10 @@ class ChangeEmailForm(FlaskForm):
 
 class ChangePasswordForm(FlaskForm):
     current_password = PasswordField("Current password", validators=[DataRequired()])
-    new_password = PasswordField("New password", validators=[DataRequired(), Length(min=8)])
+    new_password = PasswordField(
+        "New password",
+        validators=[DataRequired(), _validate_password_strength],
+    )
     confirm_password = PasswordField(
         "Confirm new password",
         validators=[DataRequired(), EqualTo("new_password", message="Passwords don't match.")],

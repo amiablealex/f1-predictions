@@ -8,6 +8,7 @@ from flask_login import current_user
 
 from app.config import get_config
 from app.extensions import csrf, db, login_manager, migrate
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Models are imported here so that `flask db migrate` discovers them via
 # SQLAlchemy's metadata. Do not remove.
@@ -30,6 +31,9 @@ def create_app(config_class=None) -> Flask:
 
     cfg = config_class or get_config()
     app.config.from_object(cfg)
+    
+    # Trust one layer of proxy headers (Railway's edge).
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     _configure_logging(app)
     _init_extensions(app)
@@ -72,6 +76,16 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(leaderboard_bp, url_prefix="/leaderboard")
     app.register_blueprint(rules_bp, url_prefix="/rules")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+
+    @app.route("/health")
+    def health():
+        from sqlalchemy import text
+        try:
+            db.session.execute(text("SELECT 1"))
+            return {"status": "ok"}, 200
+        except Exception:
+            app.logger.exception("Health check failed")
+            return {"status": "error"}, 500
 
     @app.route("/")
     def index():

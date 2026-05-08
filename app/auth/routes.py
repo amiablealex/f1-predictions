@@ -20,6 +20,7 @@ from app.auth.forms import (
 )
 from app.extensions import db
 from app.models.user import PasswordResetToken, User
+from app.auth.rate_limit import is_blocked, record_failure, reset, retry_after_seconds
 
 auth_bp = Blueprint("auth", __name__, template_folder="../templates")
 
@@ -75,20 +76,32 @@ def register():
 # Login / Logout
 # -----------------------------------------------------------------------------
 
-
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
 
     form = LoginForm()
+    ip = request.remote_addr or "?"
+
+    if request.method == "POST" and is_blocked(ip):
+        wait = retry_after_seconds(ip)
+        minutes = max(1, (wait + 59) // 60)
+        flash(
+            f"Too many failed attempts. Try again in {minutes} minute(s).",
+            "error",
+        )
+        return render_template("auth/login.html", form=form, title="Sign in"), 429
+
     if form.validate_on_submit():
         email = form.email.data.strip().lower()
         user = db.session.query(User).filter_by(email=email).first()
         if user is None or not user.check_password(form.password.data):
+            record_failure(ip)
             flash("Email or password incorrect.", "error")
             return render_template("auth/login.html", form=form, title="Sign in"), 401
 
+        reset(ip)
         login_user(user, remember=form.remember.data)
         user.last_login_at = _utcnow()
         db.session.commit()

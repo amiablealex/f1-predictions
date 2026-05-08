@@ -49,6 +49,7 @@
     <div class="field">
       <label class="field__label" for="pw_new">{{ password_form.new_password.label.text }}</label>
       {{ password_form.new_password(id="pw_new", class_="field__input", autocomplete="new-password") }}
+      <small class="muted">At least 8 characters, including a number.</small>
       {% for err in password_form.new_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
     </div>
     <div class="field">
