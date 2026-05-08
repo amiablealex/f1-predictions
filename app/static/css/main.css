@@ -419,7 +419,51 @@ p { margin: 0 0 var(--space-3) 0; }
 .pred-row__actual { text-align: right; }
 .pred-row__points { min-width: 44px; text-align: right; }
 
-.leaderboard-row--self { background: var(--c-surface-alt); border-radius: var(--radius-sm); padding-left: 4px; padding-right: 4px; }
+.round-header--no-nav {
+  display: block;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------- Leaderboard rows */
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.leaderboard-row--head {
+  padding-top: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-border);
+}
+.leaderboard-row--self {
+  background: var(--c-surface-alt);
+  border-radius: var(--radius-sm);
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.leaderboard-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.leaderboard-row__cols {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.leaderboard-row__link {
+  color: var(--c-ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--c-border);
+}
+.leaderboard-row__last-link {
+  text-decoration: none;
+  color: inherit;
+}
 
 /* ----------------------------------------------------------- Status banner */
 

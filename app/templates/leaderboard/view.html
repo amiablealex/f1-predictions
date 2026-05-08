@@ -24,10 +24,20 @@
   {% if not rows %}
     <p class="muted">No scores yet. The leaderboard fills in as phases reveal.</p>
   {% else %}
+    {# Column header row — only render the Last header when there's a scored round to anchor it. #}
+    <div class="leaderboard-row leaderboard-row--head">
+      <div></div>
+      <div class="leaderboard-row__cols small muted">
+        {% if last_scored %}
+          <span>Last (R{{ last_scored.round_number }})</span>
+        {% endif %}
+        <span>Total</span>
+      </div>
+    </div>
+
     {% for row in rows %}
-      <div class="row row--space leaderboard-row{% if row.is_self %} leaderboard-row--self{% endif %}"
-           style="padding:8px 0;border-bottom:1px solid var(--c-border);">
-        <div class="row" style="gap:12px;">
+      <div class="leaderboard-row{% if row.is_self %} leaderboard-row--self{% endif %}">
+        <div class="leaderboard-row__name row" style="gap:12px;">
           <span class="muted small tabular" style="min-width:1.5em;">{{ row.rank }}</span>
           {% if row.is_self %}
             <span>{{ row.username }} <span class="small muted">(you)</span></span>
@@ -36,20 +46,39 @@
                                 season=friend_landing.season,
                                 round_number=friend_landing.round_number,
                                 username=row.username) }}"
-               style="color:var(--c-ink);text-decoration:none;border-bottom:1px solid var(--c-border);">
+               class="leaderboard-row__link">
               {{ row.username }}
             </a>
           {% else %}
             <span>{{ row.username }}</span>
           {% endif %}
         </div>
-        <span class="tabular pill pill--p10">{{ row.score }}</span>
+
+        <div class="leaderboard-row__cols">
+          {% if last_scored %}
+            {% if row.is_self %}
+              <a href="{{ url_for('rounds.view',
+                                  season=last_scored.season,
+                                  round_number=last_scored.round_number) }}"
+                 class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
+            {% else %}
+              <a href="{{ url_for('rounds.view_friend',
+                                  season=last_scored.season,
+                                  round_number=last_scored.round_number,
+                                  username=row.username) }}"
+                 class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
+            {% endif %}
+          {% endif %}
+          <span class="tabular pill pill--p10">{{ row.score }}</span>
+        </div>
       </div>
     {% endfor %}
   {% endif %}
 </section>
 
 {% if friend_landing %}
-  <p class="small muted">Tap a name to see their predictions for round {{ friend_landing.round_number }}.</p>
+  <p class="small muted">
+    Tap a name to see their predictions, or tap their last score to jump to that round's breakdown.
+  </p>
 {% endif %}
 {% endblock %}

@@ -1,10 +1,12 @@
 """Leaderboard blueprint.
 
 Two views per league:
-  - 'total' (default): cumulative points across the season
+  - 'total' (default): cumulative points across the season + most recent
+    round's score in a "Last" column.
   - 'h2h': count of rounds where each user was the top scorer in this
     league. Ties: every user tying for the highest score in a round earns
-    1 H2H point (per scope discussion).
+    1 H2H point. Last column = 1 if tied for top in the most recent
+    scored round, 0 otherwise.
 """
 from __future__ import annotations
 
@@ -29,8 +31,9 @@ leaderboard_bp = Blueprint("leaderboard", __name__, template_folder="../template
 class LeaderboardRow:
     user_id: int
     username: str
-    score: int
-    rank: int                # 1-based dense rank (ties share rank)
+    score: int                  # primary score (total points or H2H total)
+    last_score: int             # most-recent-scored-round score
+    rank: int                   # 1-based dense rank on `score` (ties share)
     is_self: bool
 
 
@@ -56,10 +59,12 @@ def view(league_id: int):
     member_ids = _league_member_ids(league_id)
     members_by_id = {u.id: u for u in db.session.query(User).filter(User.id.in_(member_ids)).all()}
 
+    last_scored = _most_recent_scored_round()
+
     if view_kind == "h2h":
-        rows = _build_h2h_rows(league_id, members_by_id)
+        rows = _build_h2h_rows(league_id, members_by_id, last_scored)
     else:
-        rows = _build_total_rows(league_id, members_by_id)
+        rows = _build_total_rows(league_id, members_by_id, last_scored)
 
     return render_template(
         "leaderboard/view.html",
@@ -68,6 +73,7 @@ def view(league_id: int):
         view_kind=view_kind,
         rows=rows,
         friend_landing=most_recent_visible_round(current_app.config["F1_SEASON"]),
+        last_scored=last_scored,
         title=f"{league.name} · Leaderboard",
     )
 
@@ -84,11 +90,29 @@ def _league_member_ids(league_id: int) -> list[int]:
     ]
 
 
-def _build_total_rows(league_id: int, members_by_id: dict[int, User]) -> list[LeaderboardRow]:
-    """Sum PredictionScore.points per user across the whole season."""
+def _most_recent_scored_round() -> Round | None:
+    """The round with the highest round_number that has at least one
+    PredictionScore row. Used as the anchor for the leaderboard's
+    'Last' column."""
+    return (
+        db.session.query(Round)
+        .join(PredictionScore, PredictionScore.round_id == Round.id)
+        .order_by(Round.round_number.desc())
+        .first()
+    )
+
+
+def _build_total_rows(
+    league_id: int,
+    members_by_id: dict[int, User],
+    last_scored: Round | None,
+) -> list[LeaderboardRow]:
+    """Sum PredictionScore.points per user across the whole season,
+    plus per-user score for the most recent scored round."""
     member_ids = list(members_by_id.keys())
     if not member_ids:
         return []
+
     totals = dict(
         db.session.query(
             PredictionScore.user_id, func.coalesce(func.sum(PredictionScore.points), 0),
@@ -97,19 +121,44 @@ def _build_total_rows(league_id: int, members_by_id: dict[int, User]) -> list[Le
         .group_by(PredictionScore.user_id)
         .all()
     )
-    pairs = [(u.id, int(totals.get(u.id, 0))) for u in members_by_id.values()]
-    pairs.sort(key=lambda p: (-p[1], members_by_id[p[0]].username.lower()))
-    return _rank(pairs, members_by_id)
+
+    last_scores: dict[int, int] = {}
+    if last_scored is not None:
+        last_scores = dict(
+            db.session.query(
+                PredictionScore.user_id,
+                func.coalesce(func.sum(PredictionScore.points), 0),
+            )
+            .filter(
+                PredictionScore.user_id.in_(member_ids),
+                PredictionScore.round_id == last_scored.id,
+            )
+            .group_by(PredictionScore.user_id)
+            .all()
+        )
+
+    triples = [
+        (u.id, int(totals.get(u.id, 0)), int(last_scores.get(u.id, 0)))
+        for u in members_by_id.values()
+    ]
+    triples.sort(key=lambda p: (-p[1], -p[2], members_by_id[p[0]].username.lower()))
+    return _rank(triples, members_by_id)
 
 
-def _build_h2h_rows(league_id: int, members_by_id: dict[int, User]) -> list[LeaderboardRow]:
+def _build_h2h_rows(
+    league_id: int,
+    members_by_id: dict[int, User],
+    last_scored: Round | None,
+) -> list[LeaderboardRow]:
     """For each completed round, give 1 point to every league member who
-    tied for the highest score in that round."""
+    tied for the highest score in that round.
+
+    Last column = 1 if user tied for top in `last_scored`, else 0.
+    """
     member_ids = list(members_by_id.keys())
     if not member_ids:
         return []
 
-    # Per-round per-member totals
     rows = (
         db.session.query(
             PredictionScore.round_id,
@@ -125,45 +174,57 @@ def _build_h2h_rows(league_id: int, members_by_id: dict[int, User]) -> list[Lead
     for round_id, user_id, total in rows:
         by_round[round_id].append((user_id, int(total)))
 
-    # Only count rounds whose state is COMPLETED (avoid mid-round leads).
     completed_rounds = {
         r.id for r in db.session.query(Round.id, Round.state).all() if r.state == RoundState.COMPLETED
     }
 
-    h2h: dict[int, int] = {uid: 0 for uid in member_ids}
+    h2h_total: dict[int, int] = {uid: 0 for uid in member_ids}
     for round_id, scoreboard in by_round.items():
         if round_id not in completed_rounds or not scoreboard:
             continue
         top_score = max(s for _, s in scoreboard)
         if top_score == 0:
-            continue  # no one scored anything; don't award H2H
+            continue
         for uid, score in scoreboard:
             if score == top_score:
-                h2h[uid] += 1
+                h2h_total[uid] += 1
 
-    pairs = list(h2h.items())
-    pairs.sort(key=lambda p: (-p[1], members_by_id[p[0]].username.lower()))
-    return _rank(pairs, members_by_id)
+    # Last-round H2H — 1 if tied for top in the most recent scored round.
+    h2h_last: dict[int, int] = {uid: 0 for uid in member_ids}
+    if last_scored is not None and last_scored.id in by_round:
+        scoreboard = by_round[last_scored.id]
+        if scoreboard:
+            top_score = max(s for _, s in scoreboard)
+            if top_score > 0:
+                for uid, score in scoreboard:
+                    if score == top_score:
+                        h2h_last[uid] = 1
+
+    triples = [(uid, h2h_total[uid], h2h_last[uid]) for uid in member_ids]
+    triples.sort(key=lambda p: (-p[1], -p[2], members_by_id[p[0]].username.lower()))
+    return _rank(triples, members_by_id)
 
 
-def _rank(pairs: list[tuple[int, int]], members_by_id: dict[int, User]) -> list[LeaderboardRow]:
-    """Convert (user_id, score) pairs (already sorted desc) into ranked rows.
-
-    Uses dense ranking — ties share the same rank, the next user gets the
-    next integer (1, 2, 2, 3) — the small-group-friendly choice.
+def _rank(
+    triples: list[tuple[int, int, int]],
+    members_by_id: dict[int, User],
+) -> list[LeaderboardRow]:
+    """Convert (user_id, primary_score, last_score) triples (sorted desc)
+    into ranked rows. Dense ranking on primary score — ties share.
     """
     out: list[LeaderboardRow] = []
-    last_score: int | None = None
+    last_primary: int | None = None
     rank = 0
-    for user_id, score in pairs:
-        if score != last_score:
+    for user_id, primary, last in triples:
+        if primary != last_primary:
             rank += 1
-            last_score = score
+            last_primary = primary
         u = members_by_id[user_id]
         out.append(LeaderboardRow(
             user_id=user_id,
             username=u.username,
-            score=score,
+            score=primary,
+            last_score=last,
             rank=rank,
             is_self=(user_id == current_user.id),
         ))
