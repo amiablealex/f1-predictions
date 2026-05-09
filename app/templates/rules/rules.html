@@ -13,9 +13,9 @@
   <h3>Race — Top 10</h3>
   <p>Pick the drivers you think will finish in positions 1 through 10.</p>
   <ul>
-    <li><span class="pill pill--p10">+{{ cfg.race_top10_correct }}</span> exact position</li>
-    <li><span class="pill pill--p5">+{{ cfg.race_top10_one_off }}</span> off by one</li>
-    <li><span class="pill pill--p2">+{{ cfg.race_top10_two_off }}</span> off by two</li>
+    <li><span class="{{ cfg.race_top10_correct|points_class('race_top10') }}">+{{ cfg.race_top10_correct }}</span> exact position</li>
+    <li><span class="{{ cfg.race_top10_one_off|points_class('race_top10') }}">+{{ cfg.race_top10_one_off }}</span> off by one</li>
+    <li><span class="{{ cfg.race_top10_two_off|points_class('race_top10') }}">+{{ cfg.race_top10_two_off }}</span> off by two</li>
     <li><span class="pill pill--p0">0</span> further off, or DNF</li>
   </ul>
 </section>
@@ -28,13 +28,7 @@
     {% for bucket in cfg.quali_position_buckets %}
       <li>
         {% set p = bucket.points %}
-        {% if p > 0 %}
-          <span class="pill {% if p >= 5 %}pill--p10{% else %}pill--p5{% endif %}">+{{ p }}</span>
-        {% elif p == 0 %}
-          <span class="pill pill--p0">0</span>
-        {% else %}
-          <span class="pill pill--p0">{{ p }}</span>
-        {% endif %}
+        <span class="{{ p|points_class('quali_top3') }}">{% if p > 0 %}+{% endif %}{{ p }}</span>
         {% if bucket.max_delta == 0 %}
           exact position
         {% elif bucket.max_delta >= 100 %}
@@ -56,7 +50,7 @@
   <ul>
     {% for bucket in cfg.pole_time_buckets %}
       <li>
-        <span class="pill {% if bucket.points >= 10 %}pill--p10{% elif bucket.points >= 5 %}pill--p5{% else %}pill--p2{% endif %}">+{{ bucket.points }}</span>
+        <span class="{{ bucket.points|points_class('pole_time') }}">+{{ bucket.points }}</span>
         within {{ bucket.within_seconds }}s of the actual pole time
       </li>
     {% endfor %}
@@ -69,16 +63,27 @@
     Predictions on a sprint weekend lock 1 hour before sprint qualifying on Friday.
   </p>
   <ul>
-    <li><strong>Sprint race top 3:</strong> <span class="pill pill--p5">+{{ cfg.sprint_top3_correct }}</span> exact, <span class="pill pill--p2">+{{ cfg.sprint_top3_one_off }}</span> off by one.</li>
+    <li><strong>Sprint race top 3:</strong>
+      <span class="{{ cfg.sprint_top3_correct|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_correct }}</span> exact,
+      <span class="{{ cfg.sprint_top3_one_off|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_one_off }}</span> off by one.
+    </li>
   </ul>
 </section>
 
 <section class="card">
   <h3>Race extras</h3>
   <ul>
-    <li><strong>Fastest lap:</strong> <span class="pill pill--p10">+{{ cfg.fastest_lap_correct }}</span> if you pick the right driver.</li>
-    <li><strong>DNF count:</strong> <span class="pill pill--p10">+{{ cfg.dnf_count_correct }}</span> exact, <span class="pill pill--p5">+{{ cfg.dnf_count_one_off }}</span> off by one.</li>
-    <li><strong>Places gained:</strong> pick any driver. Score = grid position − finish position. P4 → P2 finish = +2; P4 → P10 = -6. DNFs count as last place; DNS scores 0. No cap, no floor — back-of-the-grid heroics pay big.</li>
+    <li><strong>Fastest lap:</strong>
+      <span class="{{ cfg.fastest_lap_correct|points_class('fastest_lap') }}">+{{ cfg.fastest_lap_correct }}</span>
+      if you pick the right driver.
+    </li>
+    <li><strong>DNF count:</strong>
+      <span class="{{ cfg.dnf_count_correct|points_class('dnf_count') }}">+{{ cfg.dnf_count_correct }}</span> exact,
+      <span class="{{ cfg.dnf_count_one_off|points_class('dnf_count') }}">+{{ cfg.dnf_count_one_off }}</span> off by one.
+    </li>
+    <li><strong>Places gained:</strong> pick any driver. Score = grid position − finish position. P4 → P2 finish = +2; P4 → P10 = -6. No cap, no floor.<br>
+      <small class="muted">DNFs count as last classified position; DNS scores 0.</small>
+    </li>
   </ul>
 </section>
 

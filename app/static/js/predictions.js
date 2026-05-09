@@ -87,7 +87,7 @@
 
   const BADGE = {
     saved: { cls: 'pill pill--status-completed', text: 'Saved' },
-    dirty: { cls: 'pill pill--status-pending',   text: 'Unsaved changes' },
+    dirty: { cls: 'pill pill--neg',   text: 'Unsaved changes' },
     fresh: { cls: 'pill pill--status-upcoming',  text: 'New predictions' },
   };
 

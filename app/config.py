@@ -175,6 +175,7 @@ class Config:
         "points_5":  "#b8862c",         # muted ochre
         "points_2":  "#5d7088",         # soft slate blue
         "points_0":  "#9c968a",         # dim grey
+        "points_neg": "#a85a4d",         # muted brick red
         # Status indicators
         "status_upcoming": "#6f6a5e",
         "status_in_progress": "#b8862c",

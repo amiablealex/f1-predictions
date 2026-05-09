@@ -1,4 +1,4 @@
-{# Reusable macros shared across views. #}
+w{# Reusable macros shared across views. #}
 
 {% macro round_header(round_obj, prev_round=None, next_round=None, friend_username=None) %}
   {% if friend_username %}
@@ -60,11 +60,11 @@
 {% endmacro %}
 
 
-{% macro points_pill(points) %}
+{% macro points_pill(points, category="generic") %}
   {% if points is none %}
     <span class="pill pill--p0 muted">—</span>
   {% else %}
-    <span class="{{ points|points_class }}">+{{ points }}</span>
+    <span class="{{ points|points_class(category) }}">{% if points > 0 %}+{% endif %}{{ points }}</span>
   {% endif %}
 {% endmacro %}
 

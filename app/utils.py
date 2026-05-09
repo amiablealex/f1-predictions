@@ -346,16 +346,41 @@ def driver_label(driver: Driver | None) -> str:
     return f"{code} · {driver.family_name}"
 
 
-def points_class(points: int | None) -> str:
-    """CSS pill modifier for a points value (or empty string for None)."""
+# Per-category bucket tables. Each list is (min_threshold, css_suffix),
+# walked top-down — first match wins. Categories ending in negatives have
+# the catch-all "neg" applied if no positive bucket matches.
+_POINTS_BUCKETS: dict[str, list[tuple[int, str]]] = {
+    "race_top10":          [(10, "p10"), (5, "p5"), (2, "p2"), (0, "p0")],
+    "sprint_top3":         [(5, "p10"), (2, "p5"), (0, "p0")],
+    "quali_top3":          [(5, "p10"), (2, "p5"), (1, "p2"), (0, "p0")],
+    "quali_random_driver": [(5, "p10"), (2, "p5"), (1, "p2"), (0, "p0")],
+    "pole_time":           [(10, "p10"), (5, "p5"), (0, "p0")],
+    "fastest_lap":         [(10, "p10"), (0, "p0")],
+    "dnf_count":           [(10, "p10"), (5, "p5"), (0, "p0")],
+    "places_gained":       [(5, "p10"), (1, "p5"), (0, "p0")],
+    # Generic fallback preserves old behaviour for any caller that doesn't
+    # specify a category.
+    "generic":             [(10, "p10"), (5, "p5"), (2, "p2"), (0, "p0")],
+}
+_CATEGORIES_WITH_NEGATIVE = {"quali_top3", "quali_random_driver", "places_gained"}
+
+
+def points_class(points: int | None, category: str = "generic") -> str:
+    """CSS pill modifier for a points value within a category.
+
+    Same point value renders different colours depending on category — e.g.
+    +5 is "exact" (green) for sprint top 3 but "off-by-1" (yellow) for DNF
+    count. Returns empty string for None to keep template branches simple.
+    """
     if points is None:
         return ""
-    if points >= 10:
-        return "pill pill--p10"
-    if points >= 5:
-        return "pill pill--p5"
-    if points >= 2:
-        return "pill pill--p2"
+    cat = str(category)
+    buckets = _POINTS_BUCKETS.get(cat, _POINTS_BUCKETS["generic"])
+    for threshold, suffix in buckets:
+        if points >= threshold:
+            return f"pill pill--{suffix}"
+    if cat in _CATEGORIES_WITH_NEGATIVE:
+        return "pill pill--neg"
     return "pill pill--p0"
 
 

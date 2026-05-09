@@ -96,7 +96,7 @@
         </div>
         <div class="pred-row__actual small muted">{{ slot_actual(sr, pos) }}</div>
         <div class="pred-row__points">
-          {{ points_pill(scores[(PT_SPRINT_TOP3, pos)].points if (PT_SPRINT_TOP3, pos) in scores else None) }}
+          {{ points_pill(scores[(PT_SPRINT_TOP3, pos)].points if (PT_SPRINT_TOP3, pos) in scores else None, "sprint_top3") }}
         </div>
       </div>
     {% endfor %}
@@ -124,7 +124,7 @@
         {{ quali.pole_time_ms|pole_time if quali and quali.pole_time_ms else '' }}
       </div>
       <div class="pred-row__points">
-        {{ points_pill(scores[(PT_POLE_TIME, None)].points if (PT_POLE_TIME, None) in scores else None) }}
+        {{ points_pill(scores[(PT_POLE_TIME, None)].points if (PT_POLE_TIME, None) in scores else None, "pole_time") }}
       </div>
     </div>
     {% for pos in [1, 2, 3] %}
@@ -135,7 +135,7 @@
         </div>
         <div class="pred-row__actual small muted">{{ slot_actual(quali, pos) }}</div>
         <div class="pred-row__points">
-          {{ points_pill(scores[(PT_QUALI_TOP3, pos)].points if (PT_QUALI_TOP3, pos) in scores else None) }}
+          {{ points_pill(scores[(PT_QUALI_TOP3, pos)].points if (PT_QUALI_TOP3, pos) in scores else None, "quali_top3") }}
         </div>
       </div>
     {% endfor %}
@@ -154,7 +154,7 @@
           {%- endif -%}
         </div>
         <div class="pred-row__points">
-          {{ points_pill(scores[(PT_QUALI_RANDOM_DRIVER, None)].points if (PT_QUALI_RANDOM_DRIVER, None) in scores else None) }}
+          {{ points_pill(scores[(PT_QUALI_RANDOM_DRIVER, None)].points if (PT_QUALI_RANDOM_DRIVER, None) in scores else None, "quali_random_driver") }}
         </div>
       </div>
     {% endif %}
@@ -180,7 +180,7 @@
         </div>
         <div class="pred-row__actual small muted">{{ slot_actual(race, pos) }}</div>
         <div class="pred-row__points">
-          {{ points_pill(scores[(PT_RACE_TOP10, pos)].points if (PT_RACE_TOP10, pos) in scores else None) }}
+          {{ points_pill(scores[(PT_RACE_TOP10, pos)].points if (PT_RACE_TOP10, pos) in scores else None, "race_top10") }}
         </div>
       </div>
     {% endfor %}
@@ -193,7 +193,7 @@
         {{ drivers[race.fastest_lap_driver_id]|driver_label if race and race.fastest_lap_driver_id else '' }}
       </div>
       <div class="pred-row__points">
-        {{ points_pill(scores[(PT_FASTEST_LAP, None)].points if (PT_FASTEST_LAP, None) in scores else None) }}
+        {{ points_pill(scores[(PT_FASTEST_LAP, None)].points if (PT_FASTEST_LAP, None) in scores else None, "fastest_lap") }}
       </div>
     </div>
     <div class="pred-row">
@@ -207,7 +207,7 @@
         {%- endif -%}
       </div>
       <div class="pred-row__points">
-        {{ points_pill(scores[(PT_PLACES_GAINED, None)].points if (PT_PLACES_GAINED, None) in scores else None) }}
+        {{ points_pill(scores[(PT_PLACES_GAINED, None)].points if (PT_PLACES_GAINED, None) in scores else None, "places_gained") }}
       </div>
     </div>
     <div class="pred-row">
@@ -219,7 +219,7 @@
         {{ race.dnf_count if race and race.dnf_count is not none else '' }}
       </div>
       <div class="pred-row__points">
-        {{ points_pill(scores[(PT_DNF_COUNT, None)].points if (PT_DNF_COUNT, None) in scores else None) }}
+        {{ points_pill(scores[(PT_DNF_COUNT, None)].points if (PT_DNF_COUNT, None) in scores else None, "dnf_count") }}
       </div>
     </div>
   </div>

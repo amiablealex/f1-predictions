@@ -349,6 +349,7 @@ p { margin: 0 0 var(--space-3) 0; }
 .pill--p5  { background: rgba(184, 134, 44, 0.14); color: var(--c-points-5); }
 .pill--p2  { background: rgba(93, 112, 136, 0.14); color: var(--c-points-2); }
 .pill--p0  { background: rgba(156, 150, 138, 0.18); color: var(--c-points-0); }
+.pill--neg { background: rgba(168, 90, 77, 0.14); color: var(--c-points-neg); }
 
 .pill--status-upcoming    { background: rgba(111, 106, 94, 0.15);  color: var(--c-status-upcoming); }
 .pill--status-in-progress { background: rgba(184, 134, 44, 0.16); color: var(--c-status-in-progress); }
