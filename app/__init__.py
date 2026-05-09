@@ -156,4 +156,6 @@ def _register_jinja_helpers(app: Flask) -> None:
         PT_POLE_TIME=PredictionType.POLE_TIME,
         PT_FASTEST_LAP=PredictionType.FASTEST_LAP,
         PT_DNF_COUNT=PredictionType.DNF_COUNT,
+        PT_PLACES_GAINED=PredictionType.PLACES_GAINED,
+        PT_QUALI_RANDOM_DRIVER=PredictionType.QUALI_RANDOM_DRIVER,
     )

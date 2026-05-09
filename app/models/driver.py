@@ -64,5 +64,9 @@ class RoundDriver(db.Model):
     expected_driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="RESTRICT"), nullable=False)
     constructor_name: Mapped[str | None] = mapped_column(String(80))
 
-    round = relationship("Round", back_populates="round_drivers")
+    round = relationship(
+        "Round",
+        back_populates="round_drivers",
+        foreign_keys=[round_id],
+    )
     expected_driver = relationship("Driver")

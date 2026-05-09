@@ -32,6 +32,8 @@ class PredictionType(str, enum.Enum):
     POLE_TIME = "pole_time"
     FASTEST_LAP = "fastest_lap"
     DNF_COUNT = "dnf_count"
+    PLACES_GAINED = "places_gained"
+    QUALI_RANDOM_DRIVER = "quali_random_driver"
 
 
 # -----------------------------------------------------------------------------
@@ -147,6 +149,50 @@ class DnfCountPrediction(db.Model):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
     predicted_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+    round = relationship("Round")
+
+
+class PlacesGainedPrediction(db.Model):
+    """User's pick for the 'places gained' wager.
+
+    Score = grid_position - finish_position. No cap, no floor. DNF treated
+    as last_classified+1; DNS scores 0; pit lane (grid 0) treated as the
+    last grid slot for scoring purposes.
+    """
+
+    __tablename__ = "predictions_places_gained"
+    __table_args__ = (
+        UniqueConstraint("user_id", "round_id", name="uq_places_gained_user_round"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    predicted_driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="RESTRICT"), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+    round = relationship("Round")
+    predicted_driver = relationship("Driver")
+
+
+class QualiRandomDriverPrediction(db.Model):
+    """User's predicted qualifying position for the round's randomly-
+    selected driver (Round.random_quali_driver). Same bucket scoring as
+    the quali top 3 slots."""
+
+    __tablename__ = "predictions_quali_random_driver"
+    __table_args__ = (
+        UniqueConstraint("user_id", "round_id", name="uq_quali_random_user_round"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    predicted_position: Mapped[int] = mapped_column(Integer, nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     user = relationship("User")

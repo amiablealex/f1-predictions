@@ -39,6 +39,18 @@
         {{ driver_select("quali_top3_" ~ pos, choices, selected_id=existing.get("quali_top3_" ~ pos)) }}
       </div>
     {% endfor %}
+    {% if random_driver %}
+      <div class="field">
+        <label class="field__label">
+          Where will {{ random_driver.expected_driver|driver_label }} qualify?
+        </label>
+        <input type="number" name="quali_random_driver" class="field__input"
+               min="1" max="30"
+               value="{{ existing.get('quali_random_driver', '') }}"
+               autocomplete="off">
+        <small class="muted">Same driver for everyone in your league.</small>
+      </div>
+    {% endif %}
   </section>
 
   <section class="card">
@@ -58,6 +70,11 @@
       {{ driver_select("fastest_lap", choices, selected_id=existing.get("fastest_lap")) }}
     </div>
     <div class="field">
+      <label class="field__label">Places gained — pick a driver</label>
+      {{ driver_select("places_gained", choices, selected_id=existing.get("places_gained")) }}
+      <small class="muted">Points = grid position − finish position. No cap, no floor.</small>
+    </div>
+    <div class="field">
       <label class="field__label">Number of DNFs</label>
       <input type="number" name="dnf_count" class="field__input"
              min="0" max="20"
@@ -66,7 +83,7 @@
     </div>
   </section>
 
-  <div class="sticky-save">
+  <div class="form-footer" style="margin-top:1rem;">
     <div class="form-status"
          data-form-status
          data-has-submitted="{{ 'true' if existing else 'false' }}"
@@ -82,7 +99,6 @@
       Editable until the deadline. Empty fields score zero.
     </p>
   </div>
-
 </form>
 
 <script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>

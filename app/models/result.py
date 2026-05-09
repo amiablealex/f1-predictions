@@ -43,5 +43,10 @@ class SessionResult(db.Model):
     # For qualifying: the best of Q1/Q2/Q3 in milliseconds. Null otherwise.
     best_qualifying_time_ms: Mapped[int | None] = mapped_column(Integer)
 
+    # For races (and sprint races): the starting grid position. Pit lane
+    # starts come through as 0; nullable for old rows ingested before this
+    # column existed (and for qualifying-only sessions).
+    grid_position: Mapped[int | None] = mapped_column(Integer)
+
     session = relationship("Session", back_populates="results")
     actual_driver = relationship("Driver")

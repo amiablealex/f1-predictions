@@ -26,7 +26,9 @@ from app.models.driver import Driver, RoundDriver
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
+    PlacesGainedPrediction,
     PoleTimePrediction,
+    QualiRandomDriverPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
@@ -319,6 +321,7 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
             joinedload(Round.sessions).joinedload(Session.results),
             joinedload(Round.round_drivers),
             joinedload(Round.scoring_config),
+            joinedload(Round.random_quali_driver),
         )
         .filter(Round.id == round_id)
         .one_or_none()
@@ -364,6 +367,7 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
             sessions_by_type=sessions_by_type,
             round_drivers=list(round_obj.round_drivers),
             config=config,
+            round_obj=round_obj,
         )
         all_score_rows.extend(rows)
 
@@ -396,6 +400,7 @@ def _user_ids_with_predictions(round_id: int) -> list[int]:
         Top10Prediction, Top3QualiPrediction, Top3SprintPrediction,
         PoleTimePrediction, FastestLapPrediction,
         DnfCountPrediction,
+        PlacesGainedPrediction, QualiRandomDriverPrediction,
     ):
         rows = db.session.query(model.user_id).filter(model.round_id == round_id).distinct().all()
         user_id_sets.append({r[0] for r in rows})
@@ -413,6 +418,8 @@ def _load_user_predictions(user_id: int, round_id: int) -> UserPredictions:
         pole_time=db.session.query(PoleTimePrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
         fastest_lap=db.session.query(FastestLapPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
         dnf_count=db.session.query(DnfCountPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
+        places_gained=db.session.query(PlacesGainedPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
+        quali_random_driver=db.session.query(QualiRandomDriverPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
     )
 
 

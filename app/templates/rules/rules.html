@@ -21,11 +21,32 @@
 </section>
 
 <section class="card">
-  <h3>Qualifying — Top 3</h3>
+  <h3>Qualifying — Top 3 + a random driver</h3>
+  <p>Predict the top 3 finishers in qualifying. Each round also picks one random driver and asks where they'll qualify — same driver for everyone in your league. All four predictions use the same scale: closer is better, and far-off guesses cost you.</p>
   <ul>
-    <li><span class="pill pill--p10">+{{ cfg.quali_top3_correct }}</span> exact position</li>
-    <li><span class="pill pill--p5">+{{ cfg.quali_top3_one_off }}</span> off by one</li>
-    <li><span class="pill pill--p0">0</span> further off</li>
+    {% set ns = namespace(prev_max=-1) %}
+    {% for bucket in cfg.quali_position_buckets %}
+      <li>
+        {% set p = bucket.points %}
+        {% if p > 0 %}
+          <span class="pill {% if p >= 5 %}pill--p10{% else %}pill--p5{% endif %}">+{{ p }}</span>
+        {% elif p == 0 %}
+          <span class="pill pill--p0">0</span>
+        {% else %}
+          <span class="pill pill--p0">{{ p }}</span>
+        {% endif %}
+        {% if bucket.max_delta == 0 %}
+          exact position
+        {% elif bucket.max_delta >= 100 %}
+          {{ ns.prev_max + 1 }} or more positions off
+        {% elif ns.prev_max + 1 == bucket.max_delta %}
+          {{ bucket.max_delta }} position{{ '' if bucket.max_delta == 1 else 's' }} off
+        {% else %}
+          {{ ns.prev_max + 1 }}–{{ bucket.max_delta }} positions off
+        {% endif %}
+      </li>
+      {% set ns.prev_max = bucket.max_delta %}
+    {% endfor %}
   </ul>
 </section>
 
@@ -57,6 +78,7 @@
   <ul>
     <li><strong>Fastest lap:</strong> <span class="pill pill--p10">+{{ cfg.fastest_lap_correct }}</span> if you pick the right driver.</li>
     <li><strong>DNF count:</strong> <span class="pill pill--p10">+{{ cfg.dnf_count_correct }}</span> exact, <span class="pill pill--p5">+{{ cfg.dnf_count_one_off }}</span> off by one.</li>
+    <li><strong>Places gained:</strong> pick any driver. Score = grid position − finish position. P4 → P2 finish = +2; P4 → P10 = -6. DNFs count as last place; DNS scores 0. No cap, no floor — back-of-the-grid heroics pay big.</li>
   </ul>
 </section>
 

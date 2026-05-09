@@ -11,6 +11,7 @@ transaction boundaries.
 from __future__ import annotations
 
 import logging
+import random as random_mod
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session as DbSession
@@ -47,8 +48,17 @@ log = logging.getLogger(__name__)
 
 PHASE_KINDS: dict[ScoringPhase, tuple[PredictionType, ...]] = {
     ScoringPhase.SPRINT: (PredictionType.SPRINT_TOP3,),
-    ScoringPhase.QUALI:  (PredictionType.QUALI_TOP3, PredictionType.POLE_TIME),
-    ScoringPhase.RACE:   (PredictionType.RACE_TOP10, PredictionType.FASTEST_LAP, PredictionType.DNF_COUNT),
+    ScoringPhase.QUALI:  (
+        PredictionType.QUALI_TOP3,
+        PredictionType.POLE_TIME,
+        PredictionType.QUALI_RANDOM_DRIVER,
+    ),
+    ScoringPhase.RACE:   (
+        PredictionType.RACE_TOP10,
+        PredictionType.FASTEST_LAP,
+        PredictionType.DNF_COUNT,
+        PredictionType.PLACES_GAINED,
+    ),
 }
 
 
@@ -91,6 +101,35 @@ def upsert_drivers(db: DbSession, api_drivers: list[APIDriver]) -> dict[str, Dri
         out[ad.driver_ref] = upsert_driver(db, ad)
     db.flush()
     return out
+
+
+# =============================================================================
+# Random quali driver pick (one-time, per round)
+# =============================================================================
+
+
+def _assign_random_quali_driver(db: DbSession, target_round: Round) -> bool:
+    """Pick a random driver from the round's lineup for the per-round
+    quali wager. Idempotent — does nothing if already set or if the
+    lineup is empty.
+
+    Deliberately non-deterministic (`random.choice`). Once the column is
+    populated it is never overwritten, so the pick is stable for the rest
+    of the round's lifetime even across worker restarts and re-syncs.
+    """
+    if target_round.random_quali_driver_id is not None:
+        return False
+    if not target_round.round_drivers:
+        return False
+    pick = random_mod.choice(list(target_round.round_drivers))
+    target_round.random_quali_driver_id = pick.id
+    db.flush()
+    log.info(
+        "random_quali_driver: round %d/%d → driver_id=%d (car #%d)",
+        target_round.season, target_round.round_number,
+        pick.expected_driver_id, pick.car_number,
+    )
+    return True
 
 
 # =============================================================================
@@ -200,6 +239,8 @@ def copy_round_drivers_from_previous(db: DbSession, target_round: Round) -> int:
                     constructor_name=rd.constructor_name,
                 ))
             db.flush()
+            # Pick the random quali driver now that the lineup exists.
+            _assign_random_quali_driver(db, target_round)
             return len(prev.round_drivers)
     return 0
 
@@ -238,6 +279,8 @@ def upsert_round_drivers_from_entries(
             rd.expected_driver_id = driver.id
             rd.constructor_name = entry.constructor_name
     db.flush()
+    # Pick the random quali driver if not already chosen.
+    _assign_random_quali_driver(db, target_round)
     return written
 
 
@@ -316,6 +359,7 @@ def ingest_race_results(
             status=entry.status,
             is_classified=entry.is_classified,
             is_fastest_lap=entry.is_fastest_lap,
+            grid_position=entry.grid,
         )
         db.add(sr)
         if entry.is_fastest_lap:

@@ -52,8 +52,10 @@ class ScoringPhase(str, enum.Enum):
     Used by the scoring engine and the worker so leaderboards update in the
     correct waves agreed in scoping:
       - SPRINT  → after sprint race  (reveals SQ pole + SR top 3)
-      - QUALI   → after main qualifying (reveals quali top 3 + pole time)
-      - RACE    → after main race (reveals race top 10 + fastest lap + DNF)
+      - QUALI   → after main qualifying (reveals quali top 3 + pole time
+                  + random driver pick)
+      - RACE    → after main race (reveals race top 10 + fastest lap +
+                  DNF count + places gained)
     """
     SPRINT = "sprint"
     QUALI = "quali"
@@ -94,6 +96,14 @@ class Round(db.Model):
     predictions_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     predictions_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # The "where will <driver> qualify?" pick. Set once by the worker when
+    # the round's lineup is first populated; never overwritten. Same driver
+    # is used for every user in the league.
+    random_quali_driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("round_drivers.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     # Relationships
@@ -107,12 +117,23 @@ class Round(db.Model):
         "RoundDriver",
         back_populates="round",
         cascade="all, delete-orphan",
+        foreign_keys="RoundDriver.round_id",
     )
     scoring_config = relationship(
         "RoundScoringConfig",
         back_populates="round",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+    # The randomly-picked driver for the per-round quali wager. Disambiguated
+    # via foreign_keys because there are two FKs between Round and RoundDriver
+    # (the back-populated round_drivers via RoundDriver.round_id, plus this
+    # new one via Round.random_quali_driver_id). post_update breaks the
+    # circular dependency at write time.
+    random_quali_driver = relationship(
+        "RoundDriver",
+        foreign_keys=[random_quali_driver_id],
+        post_update=True,
     )
 
     @property
@@ -202,9 +223,10 @@ class RoundScoringConfig(db.Model):
     race_top10_one_off: Mapped[int] = mapped_column(Integer, nullable=False)
     race_top10_two_off: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Quali top 3
-    quali_top3_correct: Mapped[int] = mapped_column(Integer, nullable=False)
-    quali_top3_one_off: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Quali — bucketed scoring shared by quali top 3 slots and the
+    # random-driver wager. JSON list of {max_delta, points}, ordered by
+    # max_delta ascending; the first matching bucket wins.
+    quali_position_buckets: Mapped[list] = mapped_column(JSON, nullable=False)
 
     # Pole time — buckets stored as JSON list of {within_seconds, points}
     pole_time_buckets: Mapped[list] = mapped_column(JSON, nullable=False)
@@ -218,6 +240,9 @@ class RoundScoringConfig(db.Model):
     dnf_count_correct: Mapped[int] = mapped_column(Integer, nullable=False)
     dnf_count_one_off: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Note: places_gained has no per-config knobs — it's a simple
+    # (grid - finish) calculation defined entirely in the engine.
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     round = relationship("Round", back_populates="scoring_config")
@@ -230,8 +255,7 @@ class RoundScoringConfig(db.Model):
             race_top10_correct=defaults["race_top10_correct"],
             race_top10_one_off=defaults["race_top10_one_off"],
             race_top10_two_off=defaults["race_top10_two_off"],
-            quali_top3_correct=defaults["quali_top3_correct"],
-            quali_top3_one_off=defaults["quali_top3_one_off"],
+            quali_position_buckets=list(defaults["quali_position_buckets"]),
             pole_time_buckets=list(defaults["pole_time_buckets"]),
             sprint_top3_correct=defaults["sprint_top3_correct"],
             sprint_top3_one_off=defaults["sprint_top3_one_off"],

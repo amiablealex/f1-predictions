@@ -17,7 +17,9 @@ from app.extensions import db, csrf
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
+    PlacesGainedPrediction,
     PoleTimePrediction,
+    QualiRandomDriverPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
@@ -62,7 +64,6 @@ def edit():
             round_obj=rd, title="Predictions",
         )
 
-    # Load any existing draft
     existing = _load_draft(rd.id, current_user.id)
     form = FlaskForm()  # CSRF only
 
@@ -72,6 +73,7 @@ def edit():
         choices=choices,
         existing=existing,
         is_sprint=(rd.weekend_type == WeekendType.SPRINT),
+        random_driver=rd.random_quali_driver,  # may be None if worker hasn't picked yet
         form=form,
         title="Predictions",
     )
@@ -105,15 +107,13 @@ def submit():
     if errors:
         for e in errors:
             flash(e, "error")
-        # Re-render the form with the user's submitted values so they
-        # don't lose anything on validation error (defense-in-depth —
-        # client-side JS catches most of these before submit).
         return render_template(
             "predictions/edit.html",
             round_obj=rd,
             choices=choices,
             existing=request.form.to_dict(),
             is_sprint=is_sprint,
+            random_driver=rd.random_quali_driver,
             form=form,
             title="Predictions",
         )
@@ -151,6 +151,8 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
         "pole_time_ms": None,
         "fastest_lap": None,
         "dnf_count": None,
+        "places_gained": None,
+        "quali_random_driver": None,
     }
 
     # ---- race top 10 ----
@@ -194,6 +196,15 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
         else:
             payload["pole_time_ms"] = ms
 
+    # ---- random-driver quali position ----
+    rqd_raw = form.get("quali_random_driver", "").strip()
+    if rqd_raw:
+        n = _int_or_none(rqd_raw)
+        if n is None or n < 1 or n > 30:
+            errors.append("Random driver position must be between 1 and 30.")
+        else:
+            payload["quali_random_driver"] = n
+
     # ---- sprint-only fields ----
     if is_sprint:
         seen_sp: set[int] = set()
@@ -219,6 +230,15 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
             errors.append("Fastest lap: invalid driver.")
         else:
             payload["fastest_lap"] = d_id
+
+    # ---- places gained ----
+    pg_raw = form.get("places_gained", "").strip()
+    if pg_raw:
+        d_id = _int_or_none(pg_raw)
+        if d_id is None or d_id not in valid_driver_ids:
+            errors.append("Places gained: invalid driver.")
+        else:
+            payload["places_gained"] = d_id
 
     # ---- DNF count ----
     dnf_raw = form.get("dnf_count", "").strip()
@@ -262,6 +282,14 @@ def _load_draft(round_id: int, user_id: int) -> dict:
     if dn is not None:
         out["dnf_count"] = dn.predicted_count
 
+    pg = db.session.query(PlacesGainedPrediction).filter_by(user_id=user_id, round_id=round_id).first()
+    if pg is not None:
+        out["places_gained"] = pg.predicted_driver_id
+
+    rqd = db.session.query(QualiRandomDriverPrediction).filter_by(user_id=user_id, round_id=round_id).first()
+    if rqd is not None:
+        out["quali_random_driver"] = rqd.predicted_position
+
     return out
 
 
@@ -275,6 +303,8 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
     db.session.query(PoleTimePrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(FastestLapPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(DnfCountPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(PlacesGainedPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(QualiRandomDriverPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.flush()
 
     for pos, d_id in payload["top10"].items():
@@ -301,4 +331,12 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
     if payload["dnf_count"] is not None:
         db.session.add(DnfCountPrediction(
             user_id=user_id, round_id=round_id, predicted_count=payload["dnf_count"],
+        ))
+    if payload["places_gained"] is not None:
+        db.session.add(PlacesGainedPrediction(
+            user_id=user_id, round_id=round_id, predicted_driver_id=payload["places_gained"],
+        ))
+    if payload["quali_random_driver"] is not None:
+        db.session.add(QualiRandomDriverPrediction(
+            user_id=user_id, round_id=round_id, predicted_position=payload["quali_random_driver"],
         ))

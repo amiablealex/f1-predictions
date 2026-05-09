@@ -20,13 +20,16 @@ from app.models.league import League, LeagueMembership
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
+    PlacesGainedPrediction,
     PoleTimePrediction,
     PredictionScore,
     PredictionType,
+    QualiRandomDriverPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
+from app.models.result import SessionResult
 from app.models.round import (
     Round,
     RoundState,
@@ -183,6 +186,51 @@ def round_driver_choices(round_obj: Round) -> list[DriverChoice]:
 
 
 # =============================================================================
+# Top mover — display helper for the round-detail "places gained" row
+# =============================================================================
+
+
+def compute_top_mover(round_obj: Round) -> tuple[Driver | None, int | None]:
+    """Find the driver who gained the most places in this round's race.
+
+    Returns (driver, places). Places can be negative if the field's biggest
+    mover went backwards. Returns (None, None) if no race results or no
+    grid data is available.
+
+    Tie-break: better finish position wins the display slot.
+    """
+    race = next(
+        (s for s in round_obj.sessions if s.session_type == SessionType.RACE),
+        None,
+    )
+    if race is None or not race.results:
+        return (None, None)
+    classified = [
+        r for r in race.results
+        if r.is_classified and r.grid_position is not None
+    ]
+    if not classified:
+        return (None, None)
+    total = len(race.results)
+    best_result: SessionResult | None = None
+    best_gained: int | None = None
+    for r in classified:
+        grid = r.grid_position if r.grid_position != 0 else total
+        gained = grid - r.position
+        if (
+            best_gained is None
+            or gained > best_gained
+            or (gained == best_gained and best_result is not None and r.position < best_result.position)
+        ):
+            best_gained = gained
+            best_result = r
+    if best_result is None:
+        return (None, None)
+    driver = db.session.get(Driver, best_result.actual_driver_id)
+    return (driver, best_gained)
+
+
+# =============================================================================
 # Loading a user's predictions and scores for a round
 # =============================================================================
 
@@ -203,6 +251,11 @@ class RoundUserState:
     pole_time: PoleTimePrediction | None
     fastest_lap: FastestLapPrediction | None
     dnf_count: DnfCountPrediction | None
+    places_gained: PlacesGainedPrediction | None
+    quali_random_driver: QualiRandomDriverPrediction | None
+    # Display helpers (populated for the round-detail view)
+    top_mover_driver: Driver | None
+    top_mover_places: int | None
     # Scores indexed by (kind, position-or-None)
     scores: dict[tuple[PredictionType, int | None], PredictionScore]
     total_points: int
@@ -228,6 +281,7 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         .options(
             joinedload(Round.sessions).joinedload(Session.results),
             joinedload(Round.round_drivers).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.random_quali_driver).joinedload(RoundDriver.expected_driver),
         )
         .filter(Round.id == round_id)
         .one_or_none()
@@ -249,12 +303,18 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         user_id=user_id, round_id=round_id).one_or_none()
     dnf_count = db.session.query(DnfCountPrediction).filter_by(
         user_id=user_id, round_id=round_id).one_or_none()
+    places_gained = db.session.query(PlacesGainedPrediction).filter_by(
+        user_id=user_id, round_id=round_id).one_or_none()
+    quali_random_driver = db.session.query(QualiRandomDriverPrediction).filter_by(
+        user_id=user_id, round_id=round_id).one_or_none()
 
     score_rows = db.session.query(PredictionScore).filter_by(
         user_id=user_id, round_id=round_id,
     ).all()
     scores = {(s.kind, s.position): s for s in score_rows}
     total_points = sum(s.points for s in score_rows)
+
+    top_mover_driver, top_mover_places = compute_top_mover(rd)
 
     return RoundUserState(
         round_obj=rd,
@@ -266,6 +326,10 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         top10=top10, quali_top3=quali_top3, sprint_top3=sprint_top3,
         pole_time=pole_time,
         fastest_lap=fastest_lap, dnf_count=dnf_count,
+        places_gained=places_gained,
+        quali_random_driver=quali_random_driver,
+        top_mover_driver=top_mover_driver,
+        top_mover_places=top_mover_places,
         scores=scores, total_points=total_points,
     )
 
@@ -332,28 +396,6 @@ def local_time(dt: datetime | None, fmt: str = "%a %d %b %H:%M") -> str:
     return dt.astimezone(tz).strftime(fmt)
 
 
-def round_status_summary(round_obj: Round, now: datetime | None = None) -> tuple[str, str]:
-    """Return (label, css-class) for displaying a round in the season list.
-
-    Combines round.state with the predictions-locked flag to pick a pill
-    style. Labels stay terse — meant to scan quickly.
-    """
-    now = now or datetime.now(timezone.utc)
-    if round_obj.state == RoundState.COMPLETED:
-        return ("completed", "pill pill--status-completed")
-    if round_obj.state == RoundState.IN_PROGRESS:
-        return ("live", "pill pill--status-in-progress")
-    # UPCOMING territory
-    if round_obj.predictions_locked:
-        return ("locked", "pill pill--status-pending")
-    if round_obj.predictions_deadline and round_obj.predictions_deadline <= now:
-        # Deadline has passed but worker hasn't flipped the lock yet.
-        return ("locked", "pill pill--status-pending")
-    if round_obj.predictions_deadline:
-        return ("open", "pill pill--status-upcoming")
-    return ("scheduled", "pill pill--status-upcoming")
-
-
 def deadline_phrase(dt: datetime | None, threshold_hours: int = 24) -> str:
     """Render a deadline as a sentence-fitting phrase.
 
@@ -372,11 +414,27 @@ def deadline_phrase(dt: datetime | None, threshold_hours: int = 24) -> str:
         if secs < 60:
             return "in under a minute"
         if secs < 3600:
-            mins = int((secs + 59) // 60)  # ceil
+            mins = int((secs + 59) // 60)
             return f"in {mins} minute{'s' if mins != 1 else ''}"
         hours = int(round(secs / 3600))
         return f"in {hours} hour{'s' if hours != 1 else ''}"
     return f"at {local_time(dt)}"
+
+
+def round_status_summary(round_obj: Round, now: datetime | None = None) -> tuple[str, str]:
+    """Return (label, css-class) for displaying a round in the season list."""
+    now = now or datetime.now(timezone.utc)
+    if round_obj.state == RoundState.COMPLETED:
+        return ("completed", "pill pill--status-completed")
+    if round_obj.state == RoundState.IN_PROGRESS:
+        return ("live", "pill pill--status-in-progress")
+    if round_obj.predictions_locked:
+        return ("locked", "pill pill--status-pending")
+    if round_obj.predictions_deadline and round_obj.predictions_deadline <= now:
+        return ("locked", "pill pill--status-pending")
+    if round_obj.predictions_deadline:
+        return ("open", "pill pill--status-upcoming")
+    return ("scheduled", "pill pill--status-upcoming")
 
 
 def most_recent_visible_round(season: int) -> Round | None:

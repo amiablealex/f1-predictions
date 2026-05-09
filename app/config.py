@@ -122,9 +122,17 @@ class Config:
         "race_top10_correct": 10,
         "race_top10_one_off": 5,
         "race_top10_two_off": 2,
-        # Qualifying top 3 — per slot
-        "quali_top3_correct": 5,
-        "quali_top3_one_off": 2,
+        # Qualifying top 3 + random driver — bucketed scoring (shared scheme).
+        # Ordered most-precise-first; the first matching bucket wins. Last
+        # bucket is the catch-all for very-far-off guesses.
+        "quali_position_buckets": [
+            {"max_delta": 0, "points": 5},
+            {"max_delta": 1, "points": 2},
+            {"max_delta": 2, "points": 1},
+            {"max_delta": 5, "points": 0},
+            {"max_delta": 8, "points": -2},
+            {"max_delta": 999, "points": -5},
+        ],
         # Pole lap time (qualifying) — proximity buckets, awarded once
         # The list is ordered most-precise first; the first matching bucket wins.
         "pole_time_buckets": [
