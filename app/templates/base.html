@@ -58,7 +58,7 @@
           <li><a href="{{ url_for('rounds.list') }}" class="drawer__link">Results</a></li>
           <li><a href="{{ url_for('leaderboard.index') }}" class="drawer__link">Leaderboard</a></li>
           <li><a href="{{ url_for('leagues.index') }}" class="drawer__link">Leagues</a></li>
-          <li><a href="{{ url_for('rules.index') }}" class="drawer__link">How to play</a></li>
+          <li><a href="{{ url_for('rules.index') }}" class="drawer__link">Scoring</a></li>
           <li><a href="{{ url_for('auth.account') }}" class="drawer__link">Account</a></li>
           {% if current_user.is_admin %}
             <li><a href="{{ url_for('admin.dashboard') }}" class="drawer__link">Admin</a></li>
