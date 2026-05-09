@@ -83,7 +83,7 @@
     </div>
   </section>
 
-  <div class="form-footer" style="margin-top:1rem;">
+  <div class="sticky-save">
     <div class="form-status"
          data-form-status
          data-has-submitted="{{ 'true' if existing else 'false' }}"
@@ -99,6 +99,7 @@
       Editable until the deadline. Empty fields score zero.
     </p>
   </div>
+
 </form>
 
 <script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>
