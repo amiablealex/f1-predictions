@@ -100,7 +100,12 @@ class Round(db.Model):
     # the round's lineup is first populated; never overwritten. Same driver
     # is used for every user in the league.
     random_quali_driver_id: Mapped[int | None] = mapped_column(
-        ForeignKey("round_drivers.id", ondelete="SET NULL"),
+        ForeignKey(
+            "round_drivers.id",
+            ondelete="SET NULL",
+            name="fk_rounds_random_quali_driver",
+            use_alter=True,
+        ),
         nullable=True,
     )
 

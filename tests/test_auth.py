@@ -16,15 +16,15 @@ def test_register_creates_user_and_logs_in(client, db):
         data={
             "email": "new@example.com",
             "username": "new_user",
-            "password": "supersecret",
-            "confirm_password": "supersecret",
+            "password": "supersecret1",
+            "confirm_password": "supersecret1",
         },
         follow_redirects=False,
     )
     assert response.status_code == 302
     user = db.session.query(User).filter_by(email="new@example.com").one()
     assert user.username == "new_user"
-    assert user.check_password("supersecret")
+    assert user.check_password("supersecret1")
 
 
 def test_register_rejects_duplicate_email(client, make_user):
@@ -34,8 +34,8 @@ def test_register_rejects_duplicate_email(client, make_user):
         data={
             "email": "dup@example.com",
             "username": "second",
-            "password": "supersecret",
-            "confirm_password": "supersecret",
+            "password": "supersecret1",
+            "confirm_password": "supersecret1",
         },
     )
     assert response.status_code == 200
@@ -49,8 +49,8 @@ def test_register_rejects_duplicate_username(client, make_user):
         data={
             "email": "b@example.com",
             "username": "taken",
-            "password": "supersecret",
-            "confirm_password": "supersecret",
+            "password": "supersecret1",
+            "confirm_password": "supersecret1",
         },
     )
     assert response.status_code == 200
@@ -63,12 +63,26 @@ def test_register_rejects_password_mismatch(client):
         data={
             "email": "c@example.com",
             "username": "userc",
-            "password": "supersecret",
-            "confirm_password": "different",
+            "password": "supersecret1",
+            "confirm_password": "different1",
         },
     )
     assert response.status_code == 200
     assert b"don&#39;t match" in response.data or b"Passwords don" in response.data
+
+
+def test_register_rejects_password_without_digit(client):
+    response = client.post(
+        "/auth/register",
+        data={
+            "email": "nodigit@example.com",
+            "username": "nodigit",
+            "password": "alllowercase",
+            "confirm_password": "alllowercase",
+        },
+    )
+    assert response.status_code == 200
+    assert b"digit" in response.data or b"number" in response.data
 
 
 def test_register_rejects_short_password(client):

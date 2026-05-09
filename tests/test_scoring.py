@@ -12,14 +12,17 @@ from app.models.driver import RoundDriver
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
+    PlacesGainedPrediction,
     PoleTimePrediction,
     PredictionType,
+    QualiRandomDriverPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
 from app.models.result import SessionResult
 from app.models.round import (
+    Round,
     RoundScoringConfig,
     ScoringPhase,
     Session,
@@ -33,7 +36,9 @@ from app.scoring.engine import (
     build_sprint_phase_scores,
     score_dnf_count,
     score_fastest_lap,
+    score_places_gained,
     score_pole_time,
+    score_quali_random_driver,
     score_quali_top3_slot,
     score_sprint_top3_slot,
     score_top10_slot,
@@ -53,8 +58,7 @@ def make_config(**overrides) -> RoundScoringConfig:
         race_top10_correct=d["race_top10_correct"],
         race_top10_one_off=d["race_top10_one_off"],
         race_top10_two_off=d["race_top10_two_off"],
-        quali_top3_correct=d["quali_top3_correct"],
-        quali_top3_one_off=d["quali_top3_one_off"],
+        quali_position_buckets=list(d["quali_position_buckets"]),
         pole_time_buckets=list(d["pole_time_buckets"]),
         sprint_top3_correct=d["sprint_top3_correct"],
         sprint_top3_one_off=d["sprint_top3_one_off"],
@@ -83,6 +87,7 @@ def make_result(
     is_classified: bool = True,
     is_fastest_lap: bool = False,
     best_qualifying_time_ms: int | None = None,
+    grid_position: int | None = None,
 ) -> SessionResult:
     return SessionResult(
         session_id=1,
@@ -93,19 +98,35 @@ def make_result(
         is_classified=is_classified,
         is_fastest_lap=is_fastest_lap,
         best_qualifying_time_ms=best_qualifying_time_ms,
+        grid_position=grid_position,
     )
 
 
+def _baseline_field(n: int = 20) -> list[SessionResult]:
+    """Build an n-car race field where every car finishes at its grid spot.
+
+    Useful as a backdrop for places_gained tests — override one row to
+    exercise the case under test.
+    """
+    return [
+        make_result(
+            position=p,
+            car_number=p + 1000,
+            actual_driver_id=p + 1000,
+            grid_position=p,
+        )
+        for p in range(1, n + 1)
+    ]
+
+
 # =============================================================================
-# score_top10_slot — race top 10
+# score_top10_slot — race top 10 (unchanged behaviour)
 # =============================================================================
 
 
 class TestScoreTop10Slot:
     def setup_method(self):
-        # Drivers 1, 2, 3 are in cars 44, 1, 16.
         self.round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
-        # Race result: car 44 finished P1, car 1 P2, car 16 P3.
         self.results = [
             make_result(1, 44),
             make_result(2, 1),
@@ -114,17 +135,14 @@ class TestScoreTop10Slot:
         self.cfg = make_config()
 
     def test_correct_position_awards_correct_points(self):
-        # Predicted driver 1 (car 44) at P1 — actual P1. Correct.
         pts = score_top10_slot(1, 1, self.results, self.round_drivers, self.cfg)
         assert pts == 10
 
     def test_one_off_awards_one_off_points(self):
-        # Predicted driver 1 (car 44) at P2 — actual P1. Off by 1.
         pts = score_top10_slot(2, 1, self.results, self.round_drivers, self.cfg)
         assert pts == 5
 
     def test_two_off_awards_two_off_points(self):
-        # Predicted driver 1 (car 44) at P3 — actual P1. Off by 2.
         pts = score_top10_slot(3, 1, self.results, self.round_drivers, self.cfg)
         assert pts == 2
 
@@ -133,7 +151,6 @@ class TestScoreTop10Slot:
         assert pts == 0
 
     def test_dnf_scores_zero_even_if_position_matches(self):
-        # Car 44 DNF'd, returned at P20 unclassified.
         results = [
             make_result(20, 44, status="Engine", is_classified=False),
             make_result(1, 1),
@@ -142,82 +159,149 @@ class TestScoreTop10Slot:
         assert pts == 0
 
     def test_unknown_predicted_driver_zero(self):
-        # Driver 99 not in this round's lineup
         pts = score_top10_slot(1, 99, self.results, self.round_drivers, self.cfg)
         assert pts == 0
 
 
-# =============================================================================
-# Substitution: predicted Hamilton, Bottas drove car 44, Bottas won
-# =============================================================================
-
-
 def test_substitution_awards_points_to_predicted_seat():
-    # Driver 1 (Hamilton) is the regular for car 44. Bottas (driver 50)
-    # drove it this round and won.
     round_drivers = make_round_drivers({1: 44})
-    results = [
-        make_result(position=1, car_number=44, actual_driver_id=50),
-    ]
+    results = [make_result(position=1, car_number=44, actual_driver_id=50)]
     cfg = make_config()
-    # User predicted Hamilton (driver 1) at P1 — should score full points.
     pts = score_top10_slot(1, 1, results, round_drivers, cfg)
     assert pts == 10
 
 
 # =============================================================================
-# score_quali_top3_slot — qualifying top 3 (no two-off bucket)
+# score_quali_top3_slot — bucketed scoring (CHANGED in Phase 3)
+#
+# Buckets default to:
+#   delta == 0     → +5
+#   delta == 1     → +2
+#   delta == 2     → +1
+#   delta in 3..5  →  0
+#   delta in 6..8  → -2
+#   delta >= 9     → -5
 # =============================================================================
 
 
-class TestScoreQualiTop3:
+class TestScoreQualiTop3Bucketed:
     def setup_method(self):
-        self.round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
-        self.results = [
-            make_result(1, 1),    # car 1 (driver 2) on pole
-            make_result(2, 44),   # car 44 (driver 1) P2
-            make_result(3, 16),   # car 16 (driver 3) P3
-        ]
+        # Driver i is regular for car i for i in 1..20.
+        self.round_drivers = make_round_drivers({i: i for i in range(1, 21)})
+        # Quali results: car i finishes Pi for all 20 entries.
+        self.results = [make_result(p, p, actual_driver_id=p) for p in range(1, 21)]
         self.cfg = make_config()
 
-    def test_correct(self):
-        pts = score_quali_top3_slot(1, 2, self.results, self.round_drivers, self.cfg)
-        assert pts == 5
+    def _score(self, predicted_pos: int, predicted_driver_id: int) -> int:
+        return score_quali_top3_slot(
+            predicted_pos, predicted_driver_id,
+            self.results, self.round_drivers, self.cfg,
+        )
 
-    def test_one_off(self):
-        pts = score_quali_top3_slot(1, 1, self.results, self.round_drivers, self.cfg)
-        # Driver 1 actually P2, predicted P1 → off by 1
-        assert pts == 2
+    def test_exact(self):
+        # Predicted driver 1 (car 1) at P1; actual P1 → delta 0 → +5
+        assert self._score(1, 1) == 5
 
-    def test_two_off_returns_zero_for_top3(self):
-        # Driver 3 actually P3, predicted P1 → off by 2 → 0 points
-        pts = score_quali_top3_slot(1, 3, self.results, self.round_drivers, self.cfg)
+    def test_one_away(self):
+        # Predicted driver 1 at P2; actual P1 → delta 1 → +2
+        assert self._score(2, 1) == 2
+
+    def test_two_away(self):
+        # Predicted driver 1 at P3; actual P1 → delta 2 → +1
+        assert self._score(3, 1) == 1
+
+    def test_within_five_zero(self):
+        # delta 3, 4, 5 → 0
+        assert self._score(4, 1) == 0    # delta 3
+        assert self._score(5, 1) == 0    # delta 4
+        assert self._score(6, 1) == 0    # delta 5
+
+    def test_six_to_eight_negative_two(self):
+        assert self._score(7, 1) == -2   # delta 6
+        assert self._score(8, 1) == -2   # delta 7
+        assert self._score(9, 1) == -2   # delta 8
+
+    def test_nine_or_more_negative_five(self):
+        assert self._score(10, 1) == -5  # delta 9
+        assert self._score(15, 1) == -5  # delta 14
+        assert self._score(20, 1) == -5  # delta 19
+
+    def test_predicted_driver_not_in_results_scores_zero(self):
+        # Driver 99 not in lineup → no actual lookup → 0 (no penalty for
+        # picking someone who didn't qualify; would be unfair).
+        pts = self._score(1, 99)
         assert pts == 0
 
 
 # =============================================================================
-# score_pole_time — bucket-based proximity scoring
+# score_quali_random_driver — same bucket scheme, different signature
+# =============================================================================
+
+
+class TestScoreQualiRandomDriver:
+    def setup_method(self):
+        self.round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
+        # Driver 1 (car 44) actually qualified P5
+        self.results = [
+            make_result(1, 1, actual_driver_id=2),
+            make_result(2, 16, actual_driver_id=3),
+            make_result(3, 7, actual_driver_id=7),
+            make_result(4, 9, actual_driver_id=9),
+            make_result(5, 44, actual_driver_id=1),
+            make_result(6, 11, actual_driver_id=11),
+        ]
+        self.cfg = make_config()
+
+    def test_exact_pick(self):
+        # Predicted P5 for driver 1, actual P5 → +5
+        pts = score_quali_random_driver(
+            5, 1, self.results, self.round_drivers, self.cfg,
+        )
+        assert pts == 5
+
+    def test_off_by_three(self):
+        # Predicted P2 for driver 1, actual P5 → delta 3 → 0
+        pts = score_quali_random_driver(
+            2, 1, self.results, self.round_drivers, self.cfg,
+        )
+        assert pts == 0
+
+    def test_far_off_negative(self):
+        # Predicted P15 for driver 1, actual P5 → delta 10 → -5
+        pts = score_quali_random_driver(
+            15, 1, self.results, self.round_drivers, self.cfg,
+        )
+        assert pts == -5
+
+    def test_random_driver_not_in_results_zero(self):
+        # The random driver didn't appear in quali (extremely rare — DNS).
+        # Score 0, no penalty.
+        results = [make_result(1, 1, actual_driver_id=2)]
+        pts = score_quali_random_driver(
+            1, 99, results, self.round_drivers, self.cfg,
+        )
+        assert pts == 0
+
+
+# =============================================================================
+# score_pole_time (unchanged)
 # =============================================================================
 
 
 class TestScorePoleTime:
     def setup_method(self):
         self.cfg = make_config()
-        # actual pole time = 1:23.456 = 83456 ms
         self.actual_ms = 83_456
 
     def test_within_inner_bucket_awards_max(self):
-        # 0.1s off → in 0.2s bucket → 10 points
         pts = score_pole_time(self.actual_ms + 100, self.actual_ms, self.cfg)
         assert pts == 10
 
     def test_at_inner_bucket_boundary_awards_max(self):
-        # exactly 0.2s off → in inner bucket → 10 points
         pts = score_pole_time(self.actual_ms + 200, self.actual_ms, self.cfg)
         assert pts == 10
 
     def test_outside_inner_inside_outer_awards_outer(self):
-        # 0.5s off → outside 0.2s bucket, inside 1.0s bucket → 5 points
         pts = score_pole_time(self.actual_ms - 500, self.actual_ms, self.cfg)
         assert pts == 5
 
@@ -235,7 +319,7 @@ class TestScorePoleTime:
 
 
 # =============================================================================
-# score_fastest_lap
+# score_fastest_lap (unchanged)
 # =============================================================================
 
 
@@ -262,15 +346,13 @@ class TestScoreFastestLap:
         assert pts == 0
 
     def test_substitution_awards_points_to_seat_picker(self):
-        # Predicted Hamilton (regular for car 44). Bottas drove car 44 and
-        # set the fastest lap. User scores.
         results = [make_result(1, 44, actual_driver_id=50, is_fastest_lap=True)]
         pts = score_fastest_lap(1, results, self.round_drivers, self.cfg)
         assert pts == 10
 
 
 # =============================================================================
-# score_dnf_count
+# score_dnf_count (unchanged)
 # =============================================================================
 
 
@@ -293,21 +375,111 @@ class TestScoreDnfCount:
 
 
 # =============================================================================
+# score_places_gained — NEW in Phase 3
+# =============================================================================
+
+
+class TestScorePlacesGained:
+    def setup_method(self):
+        # Driver 1 is regular for car 44.
+        self.round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
+
+    def test_classified_gained_places(self):
+        # Car 44 grid 5, finished P2 → +3
+        results = _baseline_field(20)
+        results[1] = make_result(2, 44, actual_driver_id=1, grid_position=5)
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 3
+
+    def test_classified_lost_places(self):
+        # Car 44 grid 2, finished P10 → -8
+        results = _baseline_field(20)
+        results[9] = make_result(10, 44, actual_driver_id=1, grid_position=2)
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == -8
+
+    def test_classified_no_change(self):
+        results = _baseline_field(20)
+        results[4] = make_result(5, 44, actual_driver_id=1, grid_position=5)
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 0
+
+    def test_dnf_treated_as_last_classified_plus_one(self):
+        # 18 classified + 2 DNFs. Car 44 DNF'd from grid 5.
+        # treated_finish = max_classified + 1 = 18 + 1 = 19.
+        # 5 - 19 = -14
+        results = []
+        for p in range(1, 19):
+            results.append(make_result(p, p + 1000, actual_driver_id=p + 1000, grid_position=p))
+        results.append(make_result(
+            19, 44, actual_driver_id=1,
+            status="Engine", is_classified=False, grid_position=5,
+        ))
+        results.append(make_result(
+            20, 17, actual_driver_id=99,
+            status="Accident", is_classified=False, grid_position=15,
+        ))
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 5 - 19
+
+    def test_dns_scores_zero(self):
+        # Driver never started — predicted_driver_id pointed at a no-show.
+        # No penalty for picking unluckily.
+        results = _baseline_field(20)
+        results[19] = make_result(
+            20, 44, actual_driver_id=1,
+            status="Did not start", is_classified=False, grid_position=5,
+        )
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 0
+
+    def test_pit_lane_start_treated_as_last_grid_slot(self):
+        # 20-car field. Car 44 grid 0 (pit lane), finished P5.
+        # Pit lane → treated as 20. 20 - 5 = +15.
+        results = _baseline_field(20)
+        results[4] = make_result(5, 44, actual_driver_id=1, grid_position=0)
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 15
+
+    def test_no_grid_data_scores_zero(self):
+        # Defensive — old session_results from before the grid_position
+        # column existed have NULL.
+        results = [make_result(2, 44, actual_driver_id=1, grid_position=None)]
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 0
+
+    def test_driver_not_in_lineup_zero(self):
+        results = [make_result(1, 99, actual_driver_id=99, grid_position=5)]
+        pts = score_places_gained(99, results, self.round_drivers)
+        assert pts == 0
+
+    def test_substitution_uses_seat(self):
+        # Predicted Hamilton (driver 1, regular for car 44).
+        # Bottas (driver 50) drove car 44 from grid 10 to finish P3 → +7.
+        results = _baseline_field(20)
+        results[2] = make_result(3, 44, actual_driver_id=50, grid_position=10)
+        pts = score_places_gained(1, results, self.round_drivers)
+        assert pts == 7
+
+
+# =============================================================================
 # Phase orchestrator: build_race_phase_scores
 # =============================================================================
 
 
 class TestRacePhaseOrchestration:
     def setup_method(self):
-        # Map drivers 1..10 to car numbers 1..10 for simplicity
         self.round_drivers = make_round_drivers({i: i for i in range(1, 11)})
         self.cfg = make_config()
 
-        # Race result: drivers 1..10 finish in order 1..10. Driver 5 has FL.
-        # DNF count is 0 for clarity.
+        # Race result: drivers 1..10 finish in order. Driver 5 has FL.
+        # No DNFs. Grid matches finish, so places_gained == 0 for all.
         self.race_results = [
-            make_result(i, i, actual_driver_id=i, is_fastest_lap=(i == 5))
-            for i in range(1, 11)
+            make_result(
+                p, p, actual_driver_id=p,
+                is_fastest_lap=(p == 5), grid_position=p,
+            )
+            for p in range(1, 11)
         ]
         self.race_session = Session(
             id=1, round_id=1,
@@ -318,7 +490,6 @@ class TestRacePhaseOrchestration:
             fastest_lap_driver_id=5,
             dnf_count=0,
         )
-        # Attach results to the session manually since we're not committing.
         self.race_session.results = self.race_results
 
     def test_perfect_predictions_get_full_points(self):
@@ -333,45 +504,68 @@ class TestRacePhaseOrchestration:
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
         )
-        # 10 top-10 + 1 fastest-lap + 1 DNF = 12 rows
-        assert len(scores) == 12
+        # 10 top-10 + 1 FL + 1 DNF + 1 places_gained = 13 rows
+        assert len(scores) == 13
         top10_total = sum(s.points for s in scores if s.kind == PredictionType.RACE_TOP10)
         assert top10_total == 100
         fl_total = sum(s.points for s in scores if s.kind == PredictionType.FASTEST_LAP)
         assert fl_total == 10
         dnf_total = sum(s.points for s in scores if s.kind == PredictionType.DNF_COUNT)
         assert dnf_total == 10
+        # User didn't predict places_gained → 0 points but row exists.
+        pg_rows = [s for s in scores if s.kind == PredictionType.PLACES_GAINED]
+        assert len(pg_rows) == 1
+        assert pg_rows[0].points == 0
 
     def test_no_predictions_yields_zero_points_with_full_row_set(self):
-        preds = UserPredictions()  # nothing submitted
+        preds = UserPredictions()
         scores = build_race_phase_scores(
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
         )
-        # Still emit 10 + 1 + 1 = 12 rows so the results UI renders cleanly.
-        assert len(scores) == 12
+        assert len(scores) == 13
         assert all(s.points == 0 for s in scores)
 
     def test_partial_predictions_score_what_was_submitted(self):
         preds = UserPredictions(
             top10=[Top10Prediction(user_id=1, round_id=1, position=1, predicted_driver_id=1)],
-            # No fastest-lap or DNF prediction
         )
         scores = build_race_phase_scores(
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
         )
-        assert len(scores) == 12
-        # Position-1 prediction was correct → 10 points
+        assert len(scores) == 13
         p1_score = next(s for s in scores
                         if s.kind == PredictionType.RACE_TOP10 and s.position == 1)
         assert p1_score.points == 10
-        # Position-2 was not predicted → 0 points
         p2_score = next(s for s in scores
                         if s.kind == PredictionType.RACE_TOP10 and s.position == 2)
         assert p2_score.points == 0
+
+    def test_places_gained_prediction_scores(self):
+        # User predicts driver 5 for places_gained. Driver 5 grid 5, finish 5
+        # → 0 (in this test setup). Modify so driver 5 gains 3.
+        self.race_results[4] = make_result(
+            position=2, car_number=5, actual_driver_id=5,
+            is_fastest_lap=True, grid_position=5,
+        )
+        # Recompute the session results list.
+        self.race_session.results = self.race_results
+
+        preds = UserPredictions(
+            places_gained=PlacesGainedPrediction(
+                user_id=1, round_id=1, predicted_driver_id=5,
+            ),
+        )
+        scores = build_race_phase_scores(
+            user_id=1, round_id=1, user_preds=preds,
+            race_session=self.race_session,
+            round_drivers=self.round_drivers, config=self.cfg,
+        )
+        pg = next(s for s in scores if s.kind == PredictionType.PLACES_GAINED)
+        assert pg.points == 3   # 5 - 2
 
 
 # =============================================================================
@@ -379,15 +573,24 @@ class TestRacePhaseOrchestration:
 # =============================================================================
 
 
-def test_quali_phase_perfect_score():
+def _make_round_with_random_driver(random_round_driver: RoundDriver) -> Round:
+    """Build an in-memory Round with the random_quali_driver relationship
+    populated, without going through the DB."""
+    r = Round(
+        id=1, season=2026, round_number=1,
+        gp_name="Test GP", country_code="IT",
+    )
+    r.random_quali_driver = random_round_driver
+    return r
+
+
+def test_quali_phase_perfect_top3_and_pole():
     round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
     cfg = make_config()
-
-    # Pole time 1:23.456
     quali_results = [
-        make_result(1, 44, best_qualifying_time_ms=83_456),
-        make_result(2, 1),
-        make_result(3, 16),
+        make_result(1, 1, actual_driver_id=2, best_qualifying_time_ms=83_456),
+        make_result(2, 44, actual_driver_id=1),
+        make_result(3, 16, actual_driver_id=3),
     ]
     quali_session = Session(
         id=1, round_id=1,
@@ -396,10 +599,14 @@ def test_quali_phase_perfect_score():
     )
     quali_session.results = quali_results
 
+    # Round has no random driver — orchestrator still emits a 0-point
+    # row so the UI renders consistently.
+    round_obj = Round(id=1, season=2026, round_number=1, gp_name="Test")
+
     preds = UserPredictions(
         quali_top3=[
-            Top3QualiPrediction(user_id=1, round_id=1, position=1, predicted_driver_id=1),
-            Top3QualiPrediction(user_id=1, round_id=1, position=2, predicted_driver_id=2),
+            Top3QualiPrediction(user_id=1, round_id=1, position=1, predicted_driver_id=2),
+            Top3QualiPrediction(user_id=1, round_id=1, position=2, predicted_driver_id=1),
             Top3QualiPrediction(user_id=1, round_id=1, position=3, predicted_driver_id=3),
         ],
         pole_time=PoleTimePrediction(user_id=1, round_id=1, predicted_time_ms=83_456),
@@ -408,14 +615,55 @@ def test_quali_phase_perfect_score():
         user_id=1, round_id=1, user_preds=preds,
         quali_session=quali_session,
         round_drivers=round_drivers, config=cfg,
+        round_obj=round_obj,
     )
-    assert len(scores) == 4   # 3 top3 + 1 pole time
-    total = sum(s.points for s in scores)
-    assert total == 5 + 5 + 5 + 10   # all three slots correct + perfect pole time
+    # 3 top3 + 1 pole + 1 random_driver = 5 rows
+    assert len(scores) == 5
+    top3_total = sum(s.points for s in scores if s.kind == PredictionType.QUALI_TOP3)
+    assert top3_total == 5 + 5 + 5
+    pole = next(s for s in scores if s.kind == PredictionType.POLE_TIME)
+    assert pole.points == 10
+    rqd = next(s for s in scores if s.kind == PredictionType.QUALI_RANDOM_DRIVER)
+    assert rqd.points == 0   # neither prediction nor driver set
+
+
+def test_quali_phase_random_driver_scores_when_assigned():
+    round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
+    cfg = make_config()
+    # Driver 1 (car 44) actually qualified P5
+    quali_results = [
+        make_result(1, 1, actual_driver_id=2),
+        make_result(2, 16, actual_driver_id=3),
+        make_result(3, 7, actual_driver_id=7),
+        make_result(4, 9, actual_driver_id=9),
+        make_result(5, 44, actual_driver_id=1),
+    ]
+    quali_session = Session(
+        id=1, round_id=1, session_type=SessionType.QUALIFYING, pole_time_ms=None,
+    )
+    quali_session.results = quali_results
+
+    # Round's random driver is driver 1 (the RoundDriver for car 44).
+    random_rd = round_drivers[0]
+    round_obj = _make_round_with_random_driver(random_rd)
+
+    preds = UserPredictions(
+        quali_random_driver=QualiRandomDriverPrediction(
+            user_id=1, round_id=1, predicted_position=5,
+        ),
+    )
+    scores = build_quali_phase_scores(
+        user_id=1, round_id=1, user_preds=preds,
+        quali_session=quali_session,
+        round_drivers=round_drivers, config=cfg,
+        round_obj=round_obj,
+    )
+    rqd = next(s for s in scores if s.kind == PredictionType.QUALI_RANDOM_DRIVER)
+    assert rqd.points == 5   # exact prediction
 
 
 # =============================================================================
-# Phase orchestrator: build_sprint_phase_scores
+# Phase orchestrator: build_sprint_phase_scores (unchanged)
 # =============================================================================
 
 
@@ -423,7 +671,6 @@ def test_sprint_phase_perfect_score():
     round_drivers = make_round_drivers({1: 44, 2: 1, 3: 16})
     cfg = make_config()
 
-    # Sprint race: car 44 wins, 1 second, 16 third.
     sr_results = [make_result(1, 44), make_result(2, 1), make_result(3, 16)]
     sr_session = Session(id=2, round_id=1, session_type=SessionType.SPRINT_RACE)
     sr_session.results = sr_results
@@ -440,7 +687,7 @@ def test_sprint_phase_perfect_score():
         sprint_quali_session=None, sprint_race_session=sr_session,
         round_drivers=round_drivers, config=cfg,
     )
-    assert len(scores) == 3                     # 3 sprint top3 rows only
+    assert len(scores) == 3
     total = sum(s.points for s in scores)
     assert total == 5 + 5 + 5
 
@@ -453,16 +700,12 @@ def test_sprint_phase_perfect_score():
 def test_frozen_config_unaffected_by_default_changes(monkeypatch):
     """Mutating Config.SCORING_DEFAULTS must not change scores for a round
     whose RoundScoringConfig was already snapshotted with old values."""
-    # Take a snapshot of the OLD defaults.
     old_cfg = make_config()
-
-    # Mutate the global defaults to something different.
     monkeypatch.setitem(Config.SCORING_DEFAULTS, "race_top10_correct", 99)
 
     round_drivers = make_round_drivers({1: 44})
     results = [make_result(1, 44)]
     pts = score_top10_slot(1, 1, results, round_drivers, old_cfg)
-    # The snapshot still uses the original value, not 99.
     assert pts == 10
 
 
@@ -477,4 +720,5 @@ def test_dispatch_unknown_phase_raises():
             user_id=1, round_id=1, phase="nonsense",
             user_preds=UserPredictions(), sessions_by_type={},
             round_drivers=[], config=make_config(),
+            round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
         )

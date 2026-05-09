@@ -450,8 +450,8 @@ def test_race_phase_scoring_writes_score_rows(app, db, make_user):
         scores = _db.session.query(PredictionScore).filter_by(
             user_id=user.id, round_id=rd.id,
         ).all()
-        # 10 top10 + 1 fastest_lap + 1 dnf_count = 12 rows
-        assert len(scores) == 12
+        # 10 top10 + 1 fastest_lap + 1 dnf_count + 1 places_gained = 13 rows
+        assert len(scores) == 13
         # P1 prediction was correct (d1 in car 1 finished P1) → 10 points
         p1 = next(s for s in scores if s.kind == PredictionType.RACE_TOP10 and s.position == 1)
         assert p1.points == 10
