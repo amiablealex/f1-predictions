@@ -11,6 +11,7 @@ register/login round-trip can auto-join after successful auth (see
 from __future__ import annotations
 
 import logging
+import time
 
 from flask import (
     Blueprint, abort, flash, redirect, render_template, request, session, url_for,
@@ -26,6 +27,7 @@ from app.utils import user_is_member
 invite_bp = Blueprint("invite", __name__, template_folder="../templates")
 log = logging.getLogger(__name__)
 
+_PENDING_INVITE_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 PENDING_INVITE_KEY = "pending_invite_code"
 
 
@@ -35,7 +37,7 @@ PENDING_INVITE_KEY = "pending_invite_code"
 
 
 def set_pending_invite(code: str) -> None:
-    session[PENDING_INVITE_KEY] = code
+    session[PENDING_INVITE_KEY] = {"code": code, "expires_at": time.time() + _PENDING_INVITE_TTL_SECONDS}
 
 
 def consume_pending_invite(user) -> tuple[League | None, bool]:
@@ -46,7 +48,18 @@ def consume_pending_invite(user) -> tuple[League | None, bool]:
     or if the code no longer resolves (league deleted). newly_joined is
     True if we added a membership, False if the user was already in.
     """
-    code = session.pop(PENDING_INVITE_KEY, None)
+    raw = session.pop(PENDING_INVITE_KEY, None)
+    if not raw:
+        return (None, False)
+    # Tolerate the old shape from in-flight sessions during deploy.
+    if isinstance(raw, str):
+        code = raw
+    elif isinstance(raw, dict):
+        if raw.get("expires_at", 0) < time.time():
+            return (None, False)
+        code = raw.get("code")
+    else:
+        return (None, False)
     if not code:
         return (None, False)
     league = db.session.query(League).filter_by(invite_code=code).one_or_none()
