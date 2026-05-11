@@ -51,20 +51,13 @@ from app.scoring.engine import (
 
 
 def make_config(**overrides) -> RoundScoringConfig:
-    """Build a RoundScoringConfig from defaults, with optional overrides."""
-    d = Config.SCORING_DEFAULTS
-    cfg = RoundScoringConfig(
-        round_id=1,
-        race_top10_correct=d["race_top10_correct"],
-        race_top10_one_off=d["race_top10_one_off"],
-        race_top10_two_off=d["race_top10_two_off"],
-        quali_position_buckets=list(d["quali_position_buckets"]),
-        pole_time_buckets=list(d["pole_time_buckets"]),
-        sprint_top3_correct=d["sprint_top3_correct"],
-        sprint_top3_one_off=d["sprint_top3_one_off"],
-        fastest_lap_correct=d["fastest_lap_correct"],
-        dnf_count_correct=d["dnf_count_correct"],
-        dnf_count_one_off=d["dnf_count_one_off"],
+    """Build a RoundScoringConfig from defaults, with optional overrides.
+
+    Delegates to the production `from_defaults` classmethod so the test
+    helper picks up new scoring fields automatically.
+    """
+    cfg = RoundScoringConfig.from_defaults(
+        round_id=1, defaults=Config.SCORING_DEFAULTS,
     )
     for k, v in overrides.items():
         setattr(cfg, k, v)
@@ -88,6 +81,8 @@ def make_result(
     is_fastest_lap: bool = False,
     best_qualifying_time_ms: int | None = None,
     grid_position: int | None = None,
+    laps_completed: int | None = None,
+    race_time_ms: int | None = None,
 ) -> SessionResult:
     return SessionResult(
         session_id=1,
@@ -99,6 +94,8 @@ def make_result(
         is_fastest_lap=is_fastest_lap,
         best_qualifying_time_ms=best_qualifying_time_ms,
         grid_position=grid_position,
+        laps_completed=laps_completed,
+        race_time_ms=race_time_ms,
     )
 
 
@@ -503,6 +500,8 @@ class TestRacePhaseOrchestration:
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
+            round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
+            special_outcomes_by_key={},
         )
         # 10 top-10 + 1 FL + 1 DNF + 1 places_gained = 13 rows
         assert len(scores) == 13
@@ -523,6 +522,8 @@ class TestRacePhaseOrchestration:
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
+            round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
+            special_outcomes_by_key={},
         )
         assert len(scores) == 13
         assert all(s.points == 0 for s in scores)
@@ -535,6 +536,8 @@ class TestRacePhaseOrchestration:
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
+            round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
+            special_outcomes_by_key={},
         )
         assert len(scores) == 13
         p1_score = next(s for s in scores
@@ -563,6 +566,8 @@ class TestRacePhaseOrchestration:
             user_id=1, round_id=1, user_preds=preds,
             race_session=self.race_session,
             round_drivers=self.round_drivers, config=self.cfg,
+            round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
+            special_outcomes_by_key={},
         )
         pg = next(s for s in scores if s.kind == PredictionType.PLACES_GAINED)
         assert pg.points == 3   # 5 - 2
@@ -617,14 +622,18 @@ def test_quali_phase_perfect_top3_and_pole():
         round_drivers=round_drivers, config=cfg,
         round_obj=round_obj,
     )
-    # 3 top3 + 1 pole + 1 random_driver = 5 rows
-    assert len(scores) == 5
+    # 3 top3 + 1 pole + 1 random_driver + 1 h2h + 1 qnth = 7 rows
+    assert len(scores) == 7
     top3_total = sum(s.points for s in scores if s.kind == PredictionType.QUALI_TOP3)
     assert top3_total == 5 + 5 + 5
     pole = next(s for s in scores if s.kind == PredictionType.POLE_TIME)
     assert pole.points == 10
     rqd = next(s for s in scores if s.kind == PredictionType.QUALI_RANDOM_DRIVER)
     assert rqd.points == 0   # neither prediction nor driver set
+    h2h = next(s for s in scores if s.kind == PredictionType.QUALI_HEAD_TO_HEAD)
+    assert h2h.points == 0   # neither prediction nor driver set
+    qnth = next(s for s in scores if s.kind == PredictionType.QUALI_NTH)
+    assert qnth.points == 0   # neither prediction nor N set
 
 
 def test_quali_phase_random_driver_scores_when_assigned():
@@ -722,3 +731,212 @@ def test_dispatch_unknown_phase_raises():
             round_drivers=[], config=make_config(),
             round_obj=Round(id=1, season=2026, round_number=1, gp_name="T"),
         )
+# =============================================================================
+# score_quali_h2h — NEW in Phase 4
+# =============================================================================
+
+
+class TestScoreQualiH2h:
+    def setup_method(self):
+        # Two teammates: driver 1 in car 44, driver 2 in car 1.
+        self.round_drivers = make_round_drivers({1: 44, 2: 1})
+        self.rd_a = self.round_drivers[0]   # driver 1, car 44
+        self.rd_b = self.round_drivers[1]   # driver 2, car 1
+        self.cfg = make_config()
+
+    def _score(self, predicted_driver_id, results):
+        from app.scoring.engine import score_quali_h2h
+        return score_quali_h2h(
+            predicted_driver_id, self.rd_a, self.rd_b, results, self.cfg,
+        )
+
+    def test_correct_pick_a_wins(self):
+        # Car 44 P3, car 1 P8 → a wins. Picker chose driver 1 → +5.
+        results = [
+            make_result(3, 44, actual_driver_id=1),
+            make_result(8, 1, actual_driver_id=2),
+        ]
+        assert self._score(1, results) == 5
+
+    def test_correct_pick_b_wins(self):
+        # Car 44 P10, car 1 P4 → b wins. Picker chose driver 2 → +5.
+        results = [
+            make_result(10, 44, actual_driver_id=1),
+            make_result(4, 1, actual_driver_id=2),
+        ]
+        assert self._score(2, results) == 5
+
+    def test_wrong_pick_zero(self):
+        results = [
+            make_result(3, 44, actual_driver_id=1),
+            make_result(8, 1, actual_driver_id=2),
+        ]
+        # Picker chose driver 2 (loser) → 0.
+        assert self._score(2, results) == 0
+
+    def test_one_dnq_other_wins(self):
+        # Car 44 set a time, car 1 didn't appear (DNQ).
+        results = [make_result(15, 44, actual_driver_id=1)]
+        # Picker chose driver 1 (the one who set a time) → +5.
+        assert self._score(1, results) == 5
+        # Picker chose driver 2 → 0.
+        assert self._score(2, results) == 0
+
+    def test_both_dnq_no_scoring(self):
+        results = []
+        assert self._score(1, results) == 0
+        assert self._score(2, results) == 0
+
+    def test_substitution_aware(self):
+        # Substitute drove car 44 (actual_driver_id 50) and qualified P2.
+        # Regular for car 44 is driver 1, so a "won" the h2h.
+        results = [
+            make_result(2, 44, actual_driver_id=50),
+            make_result(7, 1, actual_driver_id=2),
+        ]
+        assert self._score(1, results) == 5
+        assert self._score(2, results) == 0
+
+
+# =============================================================================
+# score_quali_nth — NEW in Phase 4
+# =============================================================================
+
+
+class TestScoreQualiNth:
+    def setup_method(self):
+        # 20-driver lineup, car i for driver i.
+        self.round_drivers = make_round_drivers({i: i for i in range(1, 21)})
+        # Each driver qualifies at position equal to their id.
+        self.results = [make_result(p, p, actual_driver_id=p) for p in range(1, 21)]
+        self.cfg = make_config()
+
+    def _score(self, predicted_driver_id, n):
+        from app.scoring.engine import score_quali_nth
+        return score_quali_nth(
+            predicted_driver_id, n, self.results, self.round_drivers, self.cfg,
+        )
+
+    def test_exact(self):
+        # N=14, predicted driver 14 actually qualifies P14 → +5.
+        assert self._score(14, 14) == 5
+
+    def test_one_off(self):
+        # N=14, predicted driver 13 (actual P13) → delta 1 → +2.
+        assert self._score(13, 14) == 2
+
+    def test_two_off(self):
+        assert self._score(12, 14) == 1
+
+    def test_within_five_zero(self):
+        assert self._score(11, 14) == 0     # delta 3
+        assert self._score(9, 14) == 0      # delta 5
+
+    def test_six_to_eight_negative_two(self):
+        assert self._score(8, 14) == -2     # delta 6
+        assert self._score(6, 14) == -2     # delta 8
+
+    def test_far_off_negative_five(self):
+        assert self._score(1, 14) == -5     # delta 13
+
+    def test_picked_driver_dns_zero(self):
+        # Driver 99 not in results → 0.
+        assert self._score(99, 14) == 0
+
+
+# =============================================================================
+# Phase orchestrator: build_quali_phase_scores with h2h + qnth populated
+# =============================================================================
+
+
+def _make_round_with_full_quali_selections(
+    random_rd: RoundDriver | None,
+    qh2h_a: RoundDriver | None,
+    qh2h_b: RoundDriver | None,
+    qnth_n: int | None,
+) -> Round:
+    """Build an in-memory Round with all quali-phase selections set."""
+    r = Round(
+        id=1, season=2026, round_number=1,
+        gp_name="Test GP", country_code="IT",
+    )
+    r.random_quali_driver = random_rd
+    r.qh2h_driver_a = qh2h_a
+    r.qh2h_driver_b = qh2h_b
+    r.quali_nth_position = qnth_n
+    return r
+
+
+def test_quali_phase_scores_h2h_and_qnth_when_set():
+    # Two teammates (drivers 1 and 2). Driver 1 (car 44) qualifies P3,
+    # driver 2 (car 1) qualifies P8. N=14, driver 14 qualifies P14.
+    round_drivers = make_round_drivers({i: (44 if i == 1 else i) for i in range(1, 21)})
+    cfg = make_config()
+    quali_results = [
+        make_result(3, 44, actual_driver_id=1),
+        make_result(8, 1, actual_driver_id=2),
+    ] + [
+        make_result(p, p, actual_driver_id=p) for p in range(3, 21) if p not in (3, 8)
+    ]
+    quali_session = Session(
+        id=1, round_id=1,
+        session_type=SessionType.QUALIFYING, pole_time_ms=None,
+    )
+    quali_session.results = quali_results
+
+    rd_a = round_drivers[0]   # driver 1, car 44
+    rd_b = round_drivers[1]   # driver 2, car 1
+    round_obj = _make_round_with_full_quali_selections(
+        random_rd=None, qh2h_a=rd_a, qh2h_b=rd_b, qnth_n=14,
+    )
+
+    from app.models.prediction import QualiHeadToHeadPrediction, QualiNthPrediction
+    preds = UserPredictions(
+        qh2h=QualiHeadToHeadPrediction(
+            user_id=1, round_id=1, predicted_driver_id=1,   # correct
+        ),
+        qnth=QualiNthPrediction(
+            user_id=1, round_id=1, predicted_driver_id=14,  # exact
+        ),
+    )
+    scores = build_quali_phase_scores(
+        user_id=1, round_id=1, user_preds=preds,
+        quali_session=quali_session,
+        round_drivers=round_drivers, config=cfg,
+        round_obj=round_obj,
+    )
+    assert len(scores) == 7
+    h2h = next(s for s in scores if s.kind == PredictionType.QUALI_HEAD_TO_HEAD)
+    assert h2h.points == 5
+    qnth = next(s for s in scores if s.kind == PredictionType.QUALI_NTH)
+    assert qnth.points == 5
+
+
+def test_quali_phase_h2h_missing_team_selection_yields_zero():
+    """If the round's h2h drivers aren't set yet (worker hasn't picked
+    them), orchestrator still emits a 0-point row."""
+    round_drivers = make_round_drivers({1: 44, 2: 1})
+    cfg = make_config()
+    quali_session = Session(
+        id=1, round_id=1, session_type=SessionType.QUALIFYING, pole_time_ms=None,
+    )
+    quali_session.results = []
+
+    round_obj = _make_round_with_full_quali_selections(
+        random_rd=None, qh2h_a=None, qh2h_b=None, qnth_n=None,
+    )
+
+    from app.models.prediction import QualiHeadToHeadPrediction
+    preds = UserPredictions(
+        qh2h=QualiHeadToHeadPrediction(
+            user_id=1, round_id=1, predicted_driver_id=1,
+        ),
+    )
+    scores = build_quali_phase_scores(
+        user_id=1, round_id=1, user_preds=preds,
+        quali_session=quali_session,
+        round_drivers=round_drivers, config=cfg,
+        round_obj=round_obj,
+    )
+    h2h = next(s for s in scores if s.kind == PredictionType.QUALI_HEAD_TO_HEAD)
+    assert h2h.points == 0

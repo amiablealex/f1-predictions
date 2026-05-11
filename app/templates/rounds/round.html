@@ -139,6 +139,7 @@
         </div>
       </div>
     {% endfor %}
+
     {% set rqd = rd.random_quali_driver %}
     {% if rqd %}
       <div class="pred-row">
@@ -158,7 +159,61 @@
         </div>
       </div>
     {% endif %}
-  </div>
+
+    {% if rd.qh2h_driver_a and rd.qh2h_driver_b %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">
+          {{ rd.qh2h_driver_a.expected_driver|driver_label }}
+          vs
+          {{ rd.qh2h_driver_b.expected_driver|driver_label }}
+        </div>
+        <div class="pred-row__predicted">
+          {%- if state.qh2h and state.qh2h.predicted_driver_id in drivers -%}
+            {{ drivers[state.qh2h.predicted_driver_id]|driver_label }}
+          {%- else -%}—{%- endif -%}
+        </div>
+        <div class="pred-row__actual small muted">
+          {%- if quali -%}
+            {%- set ns = namespace(a_res=none, b_res=none) -%}
+            {%- for r in quali.results -%}
+              {%- if r.car_number == rd.qh2h_driver_a.car_number -%}{%- set ns.a_res = r -%}{%- endif -%}
+              {%- if r.car_number == rd.qh2h_driver_b.car_number -%}{%- set ns.b_res = r -%}{%- endif -%}
+            {%- endfor -%}
+            {%- if ns.a_res and (not ns.b_res or ns.a_res.position < ns.b_res.position) -%}
+              {{ rd.qh2h_driver_a.expected_driver|driver_label }}
+            {%- elif ns.b_res -%}
+              {{ rd.qh2h_driver_b.expected_driver|driver_label }}
+            {%- endif -%}
+          {%- endif -%}
+        </div>
+        <div class="pred-row__points">
+          {{ points_pill(scores[(PT_QUALI_HEAD_TO_HEAD, None)].points if (PT_QUALI_HEAD_TO_HEAD, None) in scores else None, "quali_h2h") }}
+        </div>
+      </div>
+    {% endif %}
+
+    {% if rd.quali_nth_position %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">Who qualifies P{{ rd.quali_nth_position }}?</div>
+        <div class="pred-row__predicted">
+          {%- if state.qnth and state.qnth.predicted_driver_id in drivers -%}
+            {{ drivers[state.qnth.predicted_driver_id]|driver_label }}
+          {%- else -%}—{%- endif -%}
+        </div>
+        <div class="pred-row__actual small muted">
+          {%- if quali -%}
+            {%- for r in quali.results -%}
+              {%- if r.position == rd.quali_nth_position -%}
+                {{ drivers[r.actual_driver_id]|driver_label }}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        </div>
+        <div class="pred-row__points">
+          {{ points_pill(scores[(PT_QUALI_NTH, None)].points if (PT_QUALI_NTH, None) in scores else None, "quali_nth") }}
+        </div>
+      </div>
+    {% endif %}
 </section>
 
 
@@ -222,6 +277,51 @@
         {{ points_pill(scores[(PT_DNF_COUNT, None)].points if (PT_DNF_COUNT, None) in scores else None, "dnf_count") }}
       </div>
     </div>
+
+    {% for key in [rd.special_a_key, rd.special_b_key] if key %}
+      {% set sp = SPECIALS_BY_KEY[key] if key in SPECIALS_BY_KEY else None %}
+      {% set pred = state.specials.get(key) %}
+      {% set outcome = state.special_outcomes.get(key) %}
+      {% if sp %}
+        <div class="pred-row">
+          <div class="pred-row__label small muted">{{ sp.label }}</div>
+          <div class="pred-row__predicted">
+            {%- if pred is none -%}—
+            {%- elif sp.input_type == 'driver_pick' and pred.predicted_driver_id in drivers -%}
+              {{ drivers[pred.predicted_driver_id]|driver_label }}
+            {%- elif sp.input_type == 'int' and pred.predicted_int is not none -%}
+              {{ pred.predicted_int }}
+            {%- elif sp.input_type == 'bool' and pred.predicted_bool is not none -%}
+              {{ 'Yes' if pred.predicted_bool else 'No' }}
+            {%- elif sp.input_type == 'team_pick' and pred.predicted_team_name -%}
+              {{ pred.predicted_team_name }}
+            {%- else -%}—{%- endif -%}
+          </div>
+          <div class="pred-row__actual small muted">
+            {%- if outcome is none or outcome.no_result -%}
+              {%- if outcome and outcome.no_result -%}no result{%- endif -%}
+            {%- elif sp.input_type == 'driver_pick' -%}
+              {%- set winner_ids = (outcome.actual_team_name.split(',') if outcome.actual_team_name else [outcome.actual_driver_id|string]) -%}
+              {%- for wid in winner_ids -%}
+                {%- set di = wid|int -%}
+                {%- if di in drivers -%}
+                  {{ drivers[di]|driver_label }}{% if not loop.last %}, {% endif %}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- elif sp.input_type == 'int' -%}
+              {{ outcome.actual_int }}
+            {%- elif sp.input_type == 'bool' -%}
+              {{ 'Yes' if outcome.actual_bool else 'No' }}
+            {%- elif sp.input_type == 'team_pick' -%}
+              {{ outcome.actual_team_name }}
+            {%- endif -%}
+          </div>
+          <div class="pred-row__points">
+            {{ points_pill(state.special_scores[key].points if key in state.special_scores else None, "special") }}
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
   </div>
 </section>
 {% endblock %}

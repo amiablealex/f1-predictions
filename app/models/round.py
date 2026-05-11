@@ -109,6 +109,28 @@ class Round(db.Model):
         nullable=True,
     )
 
+    # Head-to-head: two RoundDriver picks from the same team, chosen once
+    # when the lineup is populated. Same target for every user.
+    qh2h_driver_a_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "round_drivers.id", ondelete="SET NULL",
+            name="fk_rounds_qh2h_driver_a", use_alter=True,
+        ),
+        nullable=True,
+    )
+    qh2h_driver_b_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "round_drivers.id", ondelete="SET NULL",
+            name="fk_rounds_qh2h_driver_b", use_alter=True,
+        ),
+        nullable=True,
+    )
+    # "Who will qualify Nth?" — N picked once when the field size is known.
+    quali_nth_position: Mapped[int | None] = mapped_column(Integer)
+    # The two specials drawn for this round (rotation from a bank of 8).
+    special_a_key: Mapped[str | None] = mapped_column(String(40))
+    special_b_key: Mapped[str | None] = mapped_column(String(40))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     # Relationships
@@ -139,6 +161,27 @@ class Round(db.Model):
         "RoundDriver",
         foreign_keys=[random_quali_driver_id],
         post_update=True,
+    )
+
+    qh2h_driver_a = relationship(
+        "RoundDriver",
+        foreign_keys=[qh2h_driver_a_id],
+        post_update=True,
+    )
+    qh2h_driver_b = relationship(
+        "RoundDriver",
+        foreign_keys=[qh2h_driver_b_id],
+        post_update=True,
+    )
+    special_outcomes = relationship(
+        "SpecialOutcome",
+        back_populates="round",
+        cascade="all, delete-orphan",
+    )
+    pit_stops = relationship(
+        "PitStop",
+        back_populates="round",
+        cascade="all, delete-orphan",
     )
 
     @property
@@ -245,6 +288,19 @@ class RoundScoringConfig(db.Model):
     dnf_count_correct: Mapped[int] = mapped_column(Integer, nullable=False)
     dnf_count_one_off: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Quali head-to-head — binary
+    qh2h_correct: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Specials — one configurable integer per bank entry
+    special_first_retirement: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_most_pitstops: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_last_classified: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_margin_of_victory: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_lap_of_first_pitstop: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_pole_sitter_wins: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_longest_stint: Mapped[int] = mapped_column(Integer, nullable=False)
+    special_biggest_team_gap: Mapped[int] = mapped_column(Integer, nullable=False)
+
     # Note: places_gained has no per-config knobs — it's a simple
     # (grid - finish) calculation defined entirely in the engine.
 
@@ -267,4 +323,13 @@ class RoundScoringConfig(db.Model):
             fastest_lap_correct=defaults["fastest_lap_correct"],
             dnf_count_correct=defaults["dnf_count_correct"],
             dnf_count_one_off=defaults["dnf_count_one_off"],
+            qh2h_correct=defaults["qh2h_correct"],
+            special_first_retirement=defaults["special_first_retirement"],
+            special_most_pitstops=defaults["special_most_pitstops"],
+            special_last_classified=defaults["special_last_classified"],
+            special_margin_of_victory=defaults["special_margin_of_victory"],
+            special_lap_of_first_pitstop=defaults["special_lap_of_first_pitstop"],
+            special_pole_sitter_wins=defaults["special_pole_sitter_wins"],
+            special_longest_stint=defaults["special_longest_stint"],
+            special_biggest_team_gap=defaults["special_biggest_team_gap"],
         )

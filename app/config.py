@@ -150,6 +150,17 @@ class Config:
         # DNF count (main race) — proximity
         "dnf_count_correct": 10,
         "dnf_count_one_off": 5,
+        # Quali head-to-head — binary
+        "qh2h_correct": 5,
+        # Specials (RACE phase) — one entry per bank item
+        "special_first_retirement": 10,
+        "special_most_pitstops": 10,
+        "special_last_classified": 10,
+        "special_margin_of_victory": 10,
+        "special_lap_of_first_pitstop": 10,
+        "special_pole_sitter_wins": 10,
+        "special_longest_stint": 10,
+        "special_biggest_team_gap": 10,
     }
 
     # -------------------------------------------------------------------------

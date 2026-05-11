@@ -45,6 +45,24 @@
 </section>
 
 <section class="card">
+  <h3>Qualifying head-to-head</h3>
+  <p>Each round picks two teammates and asks which one you think will qualify higher. Same pairing for everyone in your league.</p>
+  <ul>
+    <li>
+      <span class="{{ cfg.qh2h_correct|points_class('quali_h2h') }}">+{{ cfg.qh2h_correct }}</span>
+      pick the higher qualifier
+    </li>
+    <li><span class="pill pill--p0">0</span> pick the lower</li>
+  </ul>
+  <p class="small muted">If one teammate fails to set a time, the one who did wins. If both fail, no scoring.</p>
+</section>
+
+<section class="card">
+  <h3>Who will qualify Nth?</h3>
+  <p>Each round picks a grid position N (between 11 and the last grid slot). Pick the driver you think will qualify exactly there. Scored the same way as the quali top 3 — by how close their actual position is to N.</p>
+</section>
+
+<section class="card">
   <h3>Pole lap time</h3>
   <p>Predict the pole-sitter's lap time as exactly as you can.</p>
   <ul>
@@ -86,6 +104,21 @@
     <li><strong>Places gained:</strong> pick any driver. Score = grid position − finish position. P4 → P2 finish = +2; P4 → P10 = -6. No cap, no floor.<br>
       <small class="muted">DNFs count as last classified position; DNS scores 0.</small>
     </li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Specials</h3>
+  <p>Each round draws two from a rotating bank of eight. Each is worth +10 if you get it right, else 0.</p>
+  <ul>
+    <li><strong>First driver to retire</strong> — pick the driver. No score if no DNFs. Ties on retirement lap: any pick of a tied driver scores.</li>
+    <li><strong>Most pit stops by any driver</strong> — pick the exact number. Ties on max count: any pick of a tied driver scores.</li>
+    <li><strong>Last classified finisher</strong> — pick the driver.</li>
+    <li><strong>Margin of victory</strong> — whole seconds. Within 5s of the actual gap scores.</li>
+    <li><strong>Lap of the first pit stop of the race</strong> — within 2 laps scores.</li>
+    <li><strong>Will the pole sitter win the race?</strong> — yes or no.</li>
+    <li><strong>Longest stint by any driver</strong> — laps. Within 5 laps scores. Stints up to retirement count.</li>
+    <li><strong>Team with biggest finishing-position gap</strong> — only teams where both drivers finish count. Teams with a DNF are excluded.</li>
   </ul>
 </section>
 

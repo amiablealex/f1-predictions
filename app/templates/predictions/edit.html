@@ -51,6 +51,27 @@
         <small class="muted">Same driver for everyone in your league.</small>
       </div>
     {% endif %}
+
+    {% if qh2h_a and qh2h_b %}
+      <div class="field">
+        <label class="field__label">
+          Who will qualify higher:
+          {{ qh2h_a.expected_driver|driver_label }}
+          vs
+          {{ qh2h_b.expected_driver|driver_label }}?
+        </label>
+        {{ driver_select("qh2h", qh2h_choices, selected_id=existing.get("qh2h")) }}
+      </div>
+    {% endif %}
+
+    {% if quali_nth_position %}
+      <div class="field">
+        <label class="field__label">
+          Who will qualify P{{ quali_nth_position }}?
+        </label>
+        {{ driver_select("qnth", choices, selected_id=existing.get("qnth")) }}
+      </div>
+    {% endif %}
   </section>
 
   <section class="card">
@@ -63,7 +84,7 @@
     {% endfor %}
   </section>
 
-  <section class="card">
+    <section class="card">
     <h3>Extras</h3>
     <div class="field">
       <label class="field__label">Fastest lap</label>
@@ -81,6 +102,45 @@
              value="{{ existing.get('dnf_count', '') }}"
              autocomplete="off">
     </div>
+
+    {% for sp in active_specials %}
+      <div class="field">
+        <label class="field__label">{{ sp.label }}</label>
+        {% if sp.input_type == 'driver_pick' %}
+          {{ driver_select("special_" ~ sp.key ~ "_driver", choices,
+                           selected_id=existing.get("special_" ~ sp.key ~ "_driver")) }}
+        {% elif sp.input_type == 'int' %}
+          <input type="number" name="special_{{ sp.key }}_int" class="field__input"
+                 min="0" max="200"
+                 value="{{ existing.get('special_' ~ sp.key ~ '_int', '') }}"
+                 autocomplete="off">
+        {% elif sp.input_type == 'bool' %}
+          <div class="field__radios">
+            <label class="radio">
+              <input type="radio" name="special_{{ sp.key }}_bool" value="yes"
+                     {% if existing.get('special_' ~ sp.key ~ '_bool') == 'yes' %}checked{% endif %}>
+              Yes
+            </label>
+            <label class="radio">
+              <input type="radio" name="special_{{ sp.key }}_bool" value="no"
+                     {% if existing.get('special_' ~ sp.key ~ '_bool') == 'no' %}checked{% endif %}>
+              No
+            </label>
+          </div>
+        {% elif sp.input_type == 'team_pick' %}
+          <select name="special_{{ sp.key }}_team" class="field__select">
+            <option value="">— select —</option>
+            {% for t in team_choices %}
+              <option value="{{ t.name }}"
+                {% if existing.get('special_' ~ sp.key ~ '_team') == t.name %}selected{% endif %}>
+                {{ t.label }}
+              </option>
+            {% endfor %}
+          </select>
+        {% endif %}
+        <small class="muted">{{ sp.description }}</small>
+      </div>
+    {% endfor %}
   </section>
 
   <div class="sticky-save">

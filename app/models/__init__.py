@@ -6,17 +6,24 @@ Flask-Migrate needs to autogenerate migrations.
 """
 from app.models.driver import Driver, RoundDriver
 from app.models.league import League, LeagueMembership
+from app.models.pitstop import PitStop
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
+    PlacesGainedPrediction,
     PoleTimePrediction,
     PredictionScore,
+    QualiHeadToHeadPrediction,
+    QualiNthPrediction,
+    QualiRandomDriverPrediction,
+    SpecialPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
 from app.models.result import SessionResult
 from app.models.round import Round, RoundScoringConfig, Session
+from app.models.special import SpecialOutcome
 from app.models.user import User, PasswordResetToken
 
 __all__ = [
@@ -24,10 +31,12 @@ __all__ = [
     "RoundDriver",
     "League",
     "LeagueMembership",
+    "PitStop",
     "Round",
     "RoundScoringConfig",
     "Session",
     "SessionResult",
+    "SpecialOutcome",
     "User",
     "PasswordResetToken",
     "Top10Prediction",
@@ -36,5 +45,10 @@ __all__ = [
     "PoleTimePrediction",
     "FastestLapPrediction",
     "DnfCountPrediction",
+    "PlacesGainedPrediction",
+    "QualiHeadToHeadPrediction",
+    "QualiNthPrediction",
+    "QualiRandomDriverPrediction",
+    "SpecialPrediction",
     "PredictionScore",
 ]

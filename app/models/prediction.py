@@ -14,7 +14,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -34,6 +34,9 @@ class PredictionType(str, enum.Enum):
     DNF_COUNT = "dnf_count"
     PLACES_GAINED = "places_gained"
     QUALI_RANDOM_DRIVER = "quali_random_driver"
+    QUALI_HEAD_TO_HEAD = "quali_head_to_head"
+    QUALI_NTH = "quali_nth"
+    SPECIAL = "special"
 
 
 # -----------------------------------------------------------------------------
@@ -199,6 +202,90 @@ class QualiRandomDriverPrediction(db.Model):
     round = relationship("Round")
 
 
+class QualiHeadToHeadPrediction(db.Model):
+    """User's pick for the round's head-to-head: which of the two
+    Round.qh2h_driver_{a,b} they think qualifies higher.
+
+    `predicted_driver_id` is a master Driver — same substitution-by-seat
+    semantics as every other driver pick.
+    """
+
+    __tablename__ = "predictions_quali_head_to_head"
+    __table_args__ = (
+        UniqueConstraint("user_id", "round_id", name="uq_qh2h_user_round"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    predicted_driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="RESTRICT"), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+    round = relationship("Round")
+    predicted_driver = relationship("Driver")
+
+
+class QualiNthPrediction(db.Model):
+    """User's pick for who will qualify in position Round.quali_nth_position.
+
+    Scoring uses the standard quali bucket scheme on |actual - N|.
+    """
+
+    __tablename__ = "predictions_quali_nth"
+    __table_args__ = (
+        UniqueConstraint("user_id", "round_id", name="uq_qnth_user_round"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    predicted_driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="RESTRICT"), nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+    round = relationship("Round")
+    predicted_driver = relationship("Driver")
+
+
+class SpecialPrediction(db.Model):
+    """One row per (user, round, special_key).
+
+    The special bank has heterogeneous payloads — some specials need a
+    driver pick, some an integer, some a yes/no, some a team name. Rather
+    than maintaining eight bespoke tables, this single table carries
+    nullable columns for each shape; the scoring engine reads the column
+    matching the special's type.
+    """
+
+    __tablename__ = "predictions_special"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "round_id", "special_key",
+            name="uq_special_user_round_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    special_key: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    # Heterogeneous payload — populated columns depend on special_key.
+    predicted_driver_id: Mapped[int | None] = mapped_column(
+        ForeignKey("drivers.id", ondelete="RESTRICT"),
+    )
+    predicted_int: Mapped[int | None] = mapped_column(Integer)
+    predicted_bool: Mapped[bool | None] = mapped_column(Boolean)
+    predicted_team_name: Mapped[str | None] = mapped_column(String(80))
+
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    user = relationship("User")
+    round = relationship("Round")
+    predicted_driver = relationship("Driver")
+
+
 # -----------------------------------------------------------------------------
 # Calculated scores (written by the scoring engine; read by leaderboards)
 # -----------------------------------------------------------------------------
@@ -215,8 +302,8 @@ class PredictionScore(db.Model):
     __tablename__ = "prediction_scores"
     __table_args__ = (
         UniqueConstraint(
-            "user_id", "round_id", "kind", "position",
-            name="uq_score_user_round_kind_position",
+            "user_id", "round_id", "kind", "position", "special_key",
+            name="uq_score_user_round_kind_position_special",
         ),
     )
 
@@ -227,8 +314,12 @@ class PredictionScore(db.Model):
         Enum(PredictionType, name="prediction_type"),
         nullable=False,
     )
+
     # NULL for non-position-based predictions.
     position: Mapped[int | None] = mapped_column(Integer)
+    # For SPECIAL kind: which special this score row is for (matches
+    # Round.special_a_key / special_b_key). NULL for all other kinds.
+    special_key: Mapped[str | None] = mapped_column(String(40))
     points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 

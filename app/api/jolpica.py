@@ -7,6 +7,7 @@ Endpoint surface used by the predictions app:
   GET /{season}/{round}/results.json                  → race results
   GET /{season}/{round}/sprint.json                   → sprint race results
   GET /{season}/{round}/sprint/qualifying.json        → sprint quali results
+  GET /{season}/{round}/pitstops.json                 → pit-stop records
                                                         (verify endpoint shape
                                                          the first time you
                                                          deploy — Jolpica
@@ -158,7 +159,21 @@ class APIRaceEntry:
     is_classified: bool        # True for "Finished" / "+N Lap(s)"
     is_fastest_lap: bool        # only one entry per race
     grid: int | None = None    # starting grid position
+    laps_completed: int | None = None  # laps the driver completed
+    race_time_ms: int | None = None    # Jolpica's Time.millis (total race time)
 
+@dataclass(frozen=True)
+class APIPitStop:
+    """One pit-stop entry from Jolpica's /pitstops endpoint.
+
+    Note: Jolpica's `duration` includes pit lane transit time, not just
+    the stationary-stop time. Useful for "most pit stops" / "lap of first
+    pit stop" / etc., but not a measure of crew speed.
+    """
+    driver_ref: str
+    lap: int
+    stop_number: int          # 1-indexed (matches Jolpica's "stop" field)
+    duration_ms: int | None   # may be missing for some historical races
 
 # =============================================================================
 # Lap time parsing
@@ -450,6 +465,42 @@ class JolpicaClient:
     def get_sprint_race_results(self, season: int, round_number: int) -> list[APIRaceEntry]:
         return self._fetch_race(f"/{season}/{round_number}/sprint.json", "SprintResults")
 
+    def get_pit_stops(self, season: int, round_number: int) -> list[APIPitStop]:
+        """Return all pit stops for a round.
+
+        Jolpica paginates pit-stop responses (default limit 30, max 100).
+        A wet race can produce 60+ stops, so we request limit=100 and
+        keep paging until we've seen the full `total`.
+        """
+        out: list[APIPitStop] = []
+        limit = 100
+        offset = 0
+        while True:
+            path = f"/{season}/{round_number}/pitstops.json?limit={limit}&offset={offset}"
+            payload = self._get_json(path)
+            races = self._race_table(payload)
+            if not races:
+                break
+            stops = races[0].get("PitStops") or []
+            for s in stops:
+                try:
+                    out.append(APIPitStop(
+                        driver_ref=s["driverId"],
+                        lap=int(s["lap"]),
+                        stop_number=int(s["stop"]),
+                        duration_ms=parse_lap_time(s.get("duration")),
+                    ))
+                except (KeyError, ValueError, TypeError) as exc:
+                    raise JolpicaParseError(f"Bad pit stop entry: {exc}") from exc
+            try:
+                total = int(payload["MRData"].get("total", len(out)))
+            except (ValueError, TypeError):
+                total = len(out)
+            offset += limit
+            if offset >= total or not stops:
+                break
+        return out
+
     def _fetch_race(self, path: str, results_key: str) -> list[APIRaceEntry]:
         payload = self._get_json(path)
         races = self._race_table(payload)
@@ -486,6 +537,17 @@ class JolpicaClient:
                 grid = int(grid_raw) if grid_raw is not None else None
             except (ValueError, TypeError):
                 grid = None
+            try:
+                laps_raw = r.get("laps")
+                laps_completed = int(laps_raw) if laps_raw is not None else None
+            except (ValueError, TypeError):
+                laps_completed = None
+            try:
+                time_block = r.get("Time") or {}
+                millis_raw = time_block.get("millis")
+                race_time_ms = int(millis_raw) if millis_raw is not None else None
+            except (ValueError, TypeError):
+                race_time_ms = None
             entries.append(APIRaceEntry(
                 position=position,
                 car_number=car_number,
@@ -495,6 +557,8 @@ class JolpicaClient:
                 is_classified=is_status_classified(status),
                 is_fastest_lap=(fastest_car_number is not None and car_number == fastest_car_number),
                 grid=grid,
+                laps_completed=laps_completed,
+                race_time_ms=race_time_ms,
             ))
         entries.sort(key=lambda e: e.position)
         return entries

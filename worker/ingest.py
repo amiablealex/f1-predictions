@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.api.jolpica import (
     APIDriver,
+    APIPitStop,
     APIQualifyingEntry,
     APIRaceEntry,
     APIRoundEntry,
@@ -26,8 +27,10 @@ from app.api.jolpica import (
 )
 from app.config import Config
 from app.models.driver import Driver, RoundDriver
+from app.models.pitstop import PitStop
 from app.models.prediction import PredictionScore, PredictionType
 from app.models.result import SessionResult
+from app.specials import SPECIAL_KEYS
 from app.models.round import (
     Round,
     RoundScoringConfig,
@@ -52,12 +55,15 @@ PHASE_KINDS: dict[ScoringPhase, tuple[PredictionType, ...]] = {
         PredictionType.QUALI_TOP3,
         PredictionType.POLE_TIME,
         PredictionType.QUALI_RANDOM_DRIVER,
+        PredictionType.QUALI_HEAD_TO_HEAD,
+        PredictionType.QUALI_NTH,
     ),
     ScoringPhase.RACE:   (
         PredictionType.RACE_TOP10,
         PredictionType.FASTEST_LAP,
         PredictionType.DNF_COUNT,
         PredictionType.PLACES_GAINED,
+        PredictionType.SPECIAL,
     ),
 }
 
@@ -130,6 +136,95 @@ def _assign_random_quali_driver(db: DbSession, target_round: Round) -> bool:
         pick.expected_driver_id, pick.car_number,
     )
     return True
+
+def _assign_qh2h_drivers(db: DbSession, target_round: Round) -> bool:
+    """Pick two RoundDriver rows from the same team for the quali
+    head-to-head wager. Only considers teams with exactly two drivers
+    (so substitution rounds with a 3rd driver entered skip that team).
+
+    Idempotent — does nothing if both columns are already set.
+    """
+    if (
+        target_round.qh2h_driver_a_id is not None
+        and target_round.qh2h_driver_b_id is not None
+    ):
+        return False
+    teams: dict[str | None, list[RoundDriver]] = {}
+    for rd in target_round.round_drivers:
+        teams.setdefault(rd.constructor_name, []).append(rd)
+    eligible = [
+        roster for team_name, roster in teams.items()
+        if team_name is not None and len(roster) == 2
+    ]
+    if not eligible:
+        return False
+    chosen = random_mod.choice(eligible)
+    # Order is arbitrary but stable once set.
+    target_round.qh2h_driver_a_id = chosen[0].id
+    target_round.qh2h_driver_b_id = chosen[1].id
+    db.flush()
+    log.info(
+        "qh2h: round %d/%d → team=%s cars #%d vs #%d",
+        target_round.season, target_round.round_number,
+        chosen[0].constructor_name, chosen[0].car_number, chosen[1].car_number,
+    )
+    return True
+
+
+def _assign_quali_nth_position(db: DbSession, target_round: Round) -> bool:
+    """Pick N in [11, field_size] for the 'who will qualify Nth' wager.
+
+    Idempotent. Skipped if the lineup is too small for the range to be
+    valid (shouldn't happen in F1, defensive only).
+    """
+    if target_round.quali_nth_position is not None:
+        return False
+    field_size = len(target_round.round_drivers)
+    if field_size < 11:
+        return False
+    target_round.quali_nth_position = random_mod.randint(11, field_size)
+    db.flush()
+    log.info(
+        "quali_nth: round %d/%d → N=%d",
+        target_round.season, target_round.round_number,
+        target_round.quali_nth_position,
+    )
+    return True
+
+
+def _assign_specials(db: DbSession, target_round: Round) -> bool:
+    """Draw two distinct specials from the bank of 8 for this round.
+
+    Idempotent — does nothing if both columns are already set. Specials
+    are lineup-independent, but for simplicity we draw them at the same
+    time as the lineup-dependent selections.
+    """
+    if (
+        target_round.special_a_key is not None
+        and target_round.special_b_key is not None
+    ):
+        return False
+    a, b = random_mod.sample(SPECIAL_KEYS, 2)
+    target_round.special_a_key = a
+    target_round.special_b_key = b
+    db.flush()
+    log.info(
+        "specials: round %d/%d → %s, %s",
+        target_round.season, target_round.round_number, a, b,
+    )
+    return True
+
+
+def _assign_round_selections(db: DbSession, target_round: Round) -> None:
+    """Run all four one-time round-level random selections.
+
+    Each is independently idempotent — safe to call after every lineup
+    change. Called from the two places that populate RoundDriver.
+    """
+    _assign_random_quali_driver(db, target_round)
+    _assign_qh2h_drivers(db, target_round)
+    _assign_quali_nth_position(db, target_round)
+    _assign_specials(db, target_round)
 
 
 # =============================================================================
@@ -239,8 +334,8 @@ def copy_round_drivers_from_previous(db: DbSession, target_round: Round) -> int:
                     constructor_name=rd.constructor_name,
                 ))
             db.flush()
-            # Pick the random quali driver now that the lineup exists.
-            _assign_random_quali_driver(db, target_round)
+            # Pick all round-level random selections now that the lineup exists.
+            _assign_round_selections(db, target_round)
             return len(prev.round_drivers)
     return 0
 
@@ -279,8 +374,8 @@ def upsert_round_drivers_from_entries(
             rd.expected_driver_id = driver.id
             rd.constructor_name = entry.constructor_name
     db.flush()
-    # Pick the random quali driver if not already chosen.
-    _assign_random_quali_driver(db, target_round)
+    # Pick all round-level random selections if not already chosen.
+    _assign_round_selections(db, target_round)
     return written
 
 
@@ -360,6 +455,8 @@ def ingest_race_results(
             is_classified=entry.is_classified,
             is_fastest_lap=entry.is_fastest_lap,
             grid_position=entry.grid,
+            laps_completed=entry.laps_completed,
+            race_time_ms=entry.race_time_ms,
         )
         db.add(sr)
         if entry.is_fastest_lap:
@@ -372,6 +469,100 @@ def ingest_race_results(
     session.results_fetched_at = datetime.now(timezone.utc)
     session.status = SessionStatus.COMPLETED
     db.flush()
+
+# =============================================================================
+# Pit stops
+# =============================================================================
+
+
+def ingest_pit_stops(
+    db: DbSession,
+    target_round: Round,
+    api_stops: list[APIPitStop],
+    drivers_by_ref: dict[str, Driver],
+) -> int:
+    """Replace pit-stop records for a round.
+
+    Wholesale-replace: Jolpica returns the complete set on every request,
+    so we wipe and reinsert. Idempotent — safe to re-run.
+
+    Unknown drivers (i.e. those not in the master Driver table at the
+    time of ingest) are skipped with a warning, on the assumption that
+    a driver appearing in pit-stop data without a matching master row
+    is a data oddity worth flagging rather than silently inserting.
+    Returns the number of rows written.
+    """
+    db.query(PitStop).filter_by(round_id=target_round.id).delete()
+    db.flush()
+
+    written = 0
+    for stop in api_stops:
+        driver = drivers_by_ref.get(stop.driver_ref)
+        if driver is None:
+            log.warning(
+                "Pit stop references unknown driver %s — skipping", stop.driver_ref,
+            )
+            continue
+        db.add(PitStop(
+            round_id=target_round.id,
+            driver_id=driver.id,
+            lap=stop.lap,
+            stop_number=stop.stop_number,
+            duration_ms=stop.duration_ms,
+        ))
+        written += 1
+    db.flush()
+    return written
+
+
+# =============================================================================
+# Special outcomes — compute + persist for the round's two active specials
+# =============================================================================
+
+
+def upsert_special_outcomes(
+    db: DbSession,
+    target_round: Round,
+    race_results: list,
+    pit_stops: list,
+) -> int:
+    """Compute outcomes for the round's two active specials and upsert.
+
+    Idempotent — wipes and rewrites both outcome rows on every call so
+    re-running after corrected race data produces correct outcomes.
+    Returns the number of outcomes written (0, 1, or 2).
+    """
+    from app.scoring.specials import compute_special_outcome
+    from app.models.special import SpecialOutcome
+
+    active = [k for k in (target_round.special_a_key, target_round.special_b_key) if k]
+    if not active:
+        return 0
+
+    # Wipe existing outcomes for this round's active specials.
+    db.query(SpecialOutcome).filter(
+        SpecialOutcome.round_id == target_round.id,
+        SpecialOutcome.special_key.in_(active),
+    ).delete(synchronize_session=False)
+    db.flush()
+
+    written = 0
+    for key in active:
+        outcome = compute_special_outcome(
+            round_id=target_round.id,
+            special_key=key,
+            race_results=race_results,
+            pit_stops=pit_stops,
+            round_drivers=list(target_round.round_drivers),
+        )
+        db.add(outcome)
+        written += 1
+    db.flush()
+    log.info(
+        "special_outcomes: round %d/%d → wrote %d outcomes (%s)",
+        target_round.season, target_round.round_number, written, ", ".join(active),
+    )
+    return written
 
 
 # =============================================================================

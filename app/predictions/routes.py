@@ -19,16 +19,21 @@ from app.models.prediction import (
     FastestLapPrediction,
     PlacesGainedPrediction,
     PoleTimePrediction,
+    QualiHeadToHeadPrediction,
+    QualiNthPrediction,
     QualiRandomDriverPrediction,
+    SpecialPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
+from app.specials import SPECIALS_BY_KEY
 from app.models.round import Round, WeekendType
 from app.utils import (
     get_current_round,
     get_round_by_number,
     round_driver_choices,
+    round_team_choices,
 )
 
 predictions_bp = Blueprint("predictions", __name__, template_folder="../templates")
@@ -71,9 +76,25 @@ def edit():
         "predictions/edit.html",
         round_obj=rd,
         choices=choices,
+        team_choices=round_team_choices(rd),
         existing=existing,
         is_sprint=(rd.weekend_type == WeekendType.SPRINT),
         random_driver=rd.random_quali_driver,  # may be None if worker hasn't picked yet
+        qh2h_choices=[
+            c for c in choices
+            if rd.qh2h_driver_a and rd.qh2h_driver_b
+            and c.driver_id in (
+                rd.qh2h_driver_a.expected_driver_id,
+                rd.qh2h_driver_b.expected_driver_id,
+            )
+        ],
+        qh2h_a=rd.qh2h_driver_a,
+        qh2h_b=rd.qh2h_driver_b,
+        quali_nth_position=rd.quali_nth_position,
+        active_specials=[
+            SPECIALS_BY_KEY[k] for k in (rd.special_a_key, rd.special_b_key)
+            if k and k in SPECIALS_BY_KEY
+        ],
         form=form,
         title="Predictions",
     )
@@ -111,9 +132,25 @@ def submit():
             "predictions/edit.html",
             round_obj=rd,
             choices=choices,
+            team_choices=round_team_choices(rd),
             existing=request.form.to_dict(),
             is_sprint=is_sprint,
             random_driver=rd.random_quali_driver,
+            qh2h_choices=[
+                c for c in choices
+                if rd.qh2h_driver_a and rd.qh2h_driver_b
+                and c.driver_id in (
+                    rd.qh2h_driver_a.expected_driver_id,
+                    rd.qh2h_driver_b.expected_driver_id,
+                )
+            ],
+            qh2h_a=rd.qh2h_driver_a,
+            qh2h_b=rd.qh2h_driver_b,
+            quali_nth_position=rd.quali_nth_position,
+            active_specials=[
+                SPECIALS_BY_KEY[k] for k in (rd.special_a_key, rd.special_b_key)
+                if k and k in SPECIALS_BY_KEY
+            ],
             form=form,
             title="Predictions",
         )
@@ -153,6 +190,9 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
         "dnf_count": None,
         "places_gained": None,
         "quali_random_driver": None,
+        "qh2h": None,
+        "qnth": None,
+        "specials": {},   # {special_key: {"driver": int|None, "int": int|None, "bool": bool|None, "team": str|None}}
     }
 
     # ---- race top 10 ----
@@ -204,6 +244,66 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
             errors.append("Random driver position must be between 1 and 30.")
         else:
             payload["quali_random_driver"] = n
+
+    # ---- quali head-to-head ----
+    qh2h_raw = form.get("qh2h", "").strip()
+    if qh2h_raw:
+        d_id = _int_or_none(qh2h_raw)
+        if d_id is None or d_id not in valid_driver_ids:
+            errors.append("Head-to-head: invalid driver.")
+        else:
+            payload["qh2h"] = d_id
+
+    # ---- quali Nth ----
+    qnth_raw = form.get("qnth", "").strip()
+    if qnth_raw:
+        d_id = _int_or_none(qnth_raw)
+        if d_id is None or d_id not in valid_driver_ids:
+            errors.append("Who will qualify Nth: invalid driver.")
+        else:
+            payload["qnth"] = d_id
+
+    # ---- specials (zero, one, or two entries) ----
+    # Form fields:
+    #   special_<key>_driver  → int driver_id
+    #   special_<key>_int     → int
+    #   special_<key>_bool    → "yes"/"no"
+    #   special_<key>_team    → team name string
+    for field_name in form.keys():
+        if not field_name.startswith("special_"):
+            continue
+        # Strip the leading "special_" and the trailing "_<suffix>".
+        for suffix in ("_driver", "_int", "_bool", "_team"):
+            if field_name.endswith(suffix):
+                key = field_name[len("special_"):-len(suffix)]
+                payload["specials"].setdefault(
+                    key, {"driver": None, "int": None, "bool": None, "team": None},
+                )
+                raw = form.get(field_name, "").strip()
+                if raw == "":
+                    break
+                if suffix == "_driver":
+                    d_id = _int_or_none(raw)
+                    if d_id is None or d_id not in valid_driver_ids:
+                        errors.append(f"Special '{key}': invalid driver.")
+                    else:
+                        payload["specials"][key]["driver"] = d_id
+                elif suffix == "_int":
+                    n = _int_or_none(raw)
+                    if n is None or n < 0 or n > 200:
+                        errors.append(f"Special '{key}': value must be 0–200.")
+                    else:
+                        payload["specials"][key]["int"] = n
+                elif suffix == "_bool":
+                    if raw.lower() in ("yes", "true", "1"):
+                        payload["specials"][key]["bool"] = True
+                    elif raw.lower() in ("no", "false", "0"):
+                        payload["specials"][key]["bool"] = False
+                    else:
+                        errors.append(f"Special '{key}': must be yes or no.")
+                elif suffix == "_team":
+                    payload["specials"][key]["team"] = raw
+                break
 
     # ---- sprint-only fields ----
     if is_sprint:
@@ -290,6 +390,24 @@ def _load_draft(round_id: int, user_id: int) -> dict:
     if rqd is not None:
         out["quali_random_driver"] = rqd.predicted_position
 
+    h2h = db.session.query(QualiHeadToHeadPrediction).filter_by(user_id=user_id, round_id=round_id).first()
+    if h2h is not None:
+        out["qh2h"] = h2h.predicted_driver_id
+
+    qnth = db.session.query(QualiNthPrediction).filter_by(user_id=user_id, round_id=round_id).first()
+    if qnth is not None:
+        out["qnth"] = qnth.predicted_driver_id
+
+    for sp in db.session.query(SpecialPrediction).filter_by(user_id=user_id, round_id=round_id):
+        if sp.predicted_driver_id is not None:
+            out[f"special_{sp.special_key}_driver"] = sp.predicted_driver_id
+        if sp.predicted_int is not None:
+            out[f"special_{sp.special_key}_int"] = sp.predicted_int
+        if sp.predicted_bool is not None:
+            out[f"special_{sp.special_key}_bool"] = "yes" if sp.predicted_bool else "no"
+        if sp.predicted_team_name is not None:
+            out[f"special_{sp.special_key}_team"] = sp.predicted_team_name
+
     return out
 
 
@@ -305,6 +423,9 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
     db.session.query(DnfCountPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(PlacesGainedPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(QualiRandomDriverPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(QualiHeadToHeadPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(QualiNthPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(SpecialPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.flush()
 
     for pos, d_id in payload["top10"].items():
@@ -339,4 +460,22 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
     if payload["quali_random_driver"] is not None:
         db.session.add(QualiRandomDriverPrediction(
             user_id=user_id, round_id=round_id, predicted_position=payload["quali_random_driver"],
+        ))
+    if payload["qh2h"] is not None:
+        db.session.add(QualiHeadToHeadPrediction(
+            user_id=user_id, round_id=round_id, predicted_driver_id=payload["qh2h"],
+        ))
+    if payload["qnth"] is not None:
+        db.session.add(QualiNthPrediction(
+            user_id=user_id, round_id=round_id, predicted_driver_id=payload["qnth"],
+        ))
+    for key, values in payload["specials"].items():
+        if all(v is None for v in values.values()):
+            continue
+        db.session.add(SpecialPrediction(
+            user_id=user_id, round_id=round_id, special_key=key,
+            predicted_driver_id=values["driver"],
+            predicted_int=values["int"],
+            predicted_bool=values["bool"],
+            predicted_team_name=values["team"],
         ))

@@ -258,7 +258,6 @@ def test_get_qualifying_results_picks_best_of_q1q2q3():
 # Race results parsing
 # =============================================================================
 
-
 def test_get_race_results_identifies_fastest_lap_setter():
     payload = {
         "MRData": {
@@ -267,12 +266,17 @@ def test_get_race_results_identifies_fastest_lap_setter():
                     "Results": [
                         {"position": "1", "number": "44", "Driver": {"driverId": "hamilton"},
                          "Constructor": {"name": "Mercedes"}, "status": "Finished",
+                         "laps": "57",
+                         "Time": {"millis": "5500000", "time": "1:31:40.000"},
                          "FastestLap": {"rank": "2"}},
                         {"position": "2", "number": "1", "Driver": {"driverId": "max_verstappen"},
                          "Constructor": {"name": "Red Bull"}, "status": "Finished",
+                         "laps": "57",
+                         "Time": {"millis": "5501234", "time": "+1.234"},
                          "FastestLap": {"rank": "1"}},
                         {"position": "20", "number": "23", "Driver": {"driverId": "albon"},
-                         "Constructor": {"name": "Williams"}, "status": "Engine"},
+                         "Constructor": {"name": "Williams"}, "status": "Engine",
+                         "laps": "23"},
                     ]
                 }]
             }
@@ -288,6 +292,33 @@ def test_get_race_results_identifies_fastest_lap_setter():
     assert results[0].is_classified is True
     assert results[1].is_classified is True
     assert results[2].is_classified is False
+    # Laps completed
+    assert results[0].laps_completed == 57
+    assert results[1].laps_completed == 57
+    assert results[2].laps_completed == 23
+    # Race times (None for the retiree — Jolpica omits Time for non-finishers)
+    assert results[0].race_time_ms == 5_500_000
+    assert results[1].race_time_ms == 5_501_234
+    assert results[2].race_time_ms is None
+
+
+def test_get_race_results_handles_missing_laps():
+    """A row without a `laps` field parses with laps_completed=None."""
+    payload = {
+        "MRData": {
+            "RaceTable": {
+                "Races": [{
+                    "Results": [
+                        {"position": "1", "number": "44", "Driver": {"driverId": "hamilton"},
+                         "Constructor": {"name": "Mercedes"}, "status": "Finished"},
+                    ]
+                }]
+            }
+        }
+    }
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        results = _client().get_race_results(2026, 1)
+    assert results[0].laps_completed is None
 
 
 # =============================================================================
@@ -333,3 +364,81 @@ def test_malformed_json_raises_parse_error():
     with patch("app.api.jolpica.requests.get", return_value=_mock_response(bad_payload)):
         with pytest.raises(JolpicaParseError):
             _client().get_season_schedule(2026)
+
+# =============================================================================
+# Pit-stop parsing
+# =============================================================================
+
+
+def _pit_stops_payload(stops, total=None):
+    """Build a Jolpica-shaped pit-stops payload."""
+    total = total if total is not None else len(stops)
+    return {
+        "MRData": {
+            "total": str(total),
+            "RaceTable": {"Races": [{"PitStops": stops}]},
+        }
+    }
+
+
+def test_get_pit_stops_parses_single_page():
+    payload = _pit_stops_payload([
+        {"driverId": "hamilton", "lap": "12", "stop": "1", "duration": "23.456"},
+        {"driverId": "hamilton", "lap": "35", "stop": "2", "duration": "22.111"},
+        {"driverId": "max_verstappen", "lap": "14", "stop": "1", "duration": "24.000"},
+    ])
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        stops = _client().get_pit_stops(2026, 1)
+    assert len(stops) == 3
+    assert stops[0].driver_ref == "hamilton"
+    assert stops[0].lap == 12
+    assert stops[0].stop_number == 1
+    assert stops[0].duration_ms == 23_456
+    assert stops[2].driver_ref == "max_verstappen"
+    assert stops[2].duration_ms == 24_000
+
+
+def test_get_pit_stops_handles_missing_duration():
+    """Some historical races omit duration entirely."""
+    payload = _pit_stops_payload([
+        {"driverId": "hamilton", "lap": "12", "stop": "1"},
+    ])
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        stops = _client().get_pit_stops(2026, 1)
+    assert len(stops) == 1
+    assert stops[0].duration_ms is None
+
+
+def test_get_pit_stops_paginates():
+    """When total > limit, client keeps fetching until exhausted."""
+    page_one = _pit_stops_payload(
+        [
+            {"driverId": "hamilton", "lap": str(i + 1), "stop": "1", "duration": "23.000"}
+            for i in range(100)
+        ],
+        total=150,
+    )
+    page_two = _pit_stops_payload(
+        [
+            {"driverId": "max_verstappen", "lap": str(i + 1), "stop": "1", "duration": "23.000"}
+            for i in range(50)
+        ],
+        total=150,
+    )
+    responses = [_mock_response(page_one), _mock_response(page_two)]
+
+    def side_effect(*args, **kwargs):
+        return responses.pop(0)
+
+    with patch("app.api.jolpica.requests.get", side_effect=side_effect):
+        stops = _client().get_pit_stops(2026, 1)
+    assert len(stops) == 150
+    assert responses == []  # both pages consumed
+
+
+def test_get_pit_stops_empty_when_no_races():
+    """A round with no pit-stop data returns an empty list cleanly."""
+    payload = {"MRData": {"total": "0", "RaceTable": {"Races": []}}}
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        stops = _client().get_pit_stops(2026, 99)
+    assert stops == []

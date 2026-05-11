@@ -28,11 +28,16 @@ from app.models.prediction import (
     FastestLapPrediction,
     PlacesGainedPrediction,
     PoleTimePrediction,
+    QualiHeadToHeadPrediction,
+    QualiNthPrediction,
     QualiRandomDriverPrediction,
+    SpecialPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
+from app.models.pitstop import PitStop
+from app.models.special import SpecialOutcome
 from app.models.round import (
     Round,
     RoundState,
@@ -45,6 +50,7 @@ from app.scoring.engine import UserPredictions, build_phase_scores
 from worker.ingest import (
     PHASE_KINDS,
     copy_round_drivers_from_previous,
+    ingest_pit_stops,
     ingest_qualifying_results,
     ingest_race_results,
     replace_phase_scores,
@@ -53,6 +59,7 @@ from worker.ingest import (
     upsert_drivers,
     upsert_round_drivers_from_entries,
     upsert_round_with_sessions,
+    upsert_special_outcomes,
 )
 
 log = logging.getLogger(__name__)
@@ -259,6 +266,20 @@ def _fetch_and_ingest_session(client: JolpicaClient, round_obj: Round, session_o
         refs = {e.driver_ref for e in api_results}
         drivers = _drivers_by_ref(refs)
         ingest_race_results(db.session, session_obj, api_results, drivers)
+        # Fetch pit-stops in the same pass — needed for specials.
+        try:
+            api_stops = client.get_pit_stops(season, round_no)
+            stop_refs = {s.driver_ref for s in api_stops}
+            stop_drivers = _drivers_by_ref(stop_refs)
+            ingest_pit_stops(db.session, round_obj, api_stops, stop_drivers)
+        except JolpicaNotFoundError:
+            log.info("pit-stops not yet available for round %d", round_no)
+        # Compute special outcomes from the freshly-ingested race + stops.
+        upsert_special_outcomes(
+            db.session, round_obj,
+            race_results=list(session_obj.results),
+            pit_stops=list(round_obj.pit_stops),
+        )
     elif session_obj.session_type == SessionType.SPRINT_RACE:
         api_results = client.get_sprint_race_results(season, round_no)
         refs = {e.driver_ref for e in api_results}
@@ -322,6 +343,9 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
             joinedload(Round.round_drivers),
             joinedload(Round.scoring_config),
             joinedload(Round.random_quali_driver),
+            joinedload(Round.qh2h_driver_a),
+            joinedload(Round.qh2h_driver_b),
+            joinedload(Round.special_outcomes),
         )
         .filter(Round.id == round_id)
         .one_or_none()
@@ -356,6 +380,8 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
     log.info("phase_scoring: round %d phase %s for %d users",
              round_id, phase.value, len(user_ids))
 
+    special_outcomes_by_key = {o.special_key: o for o in round_obj.special_outcomes}
+
     all_score_rows = []
     for user_id in user_ids:
         user_preds = _load_user_predictions(user_id, round_id)
@@ -368,6 +394,7 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
             round_drivers=list(round_obj.round_drivers),
             config=config,
             round_obj=round_obj,
+            special_outcomes_by_key=special_outcomes_by_key,
         )
         all_score_rows.extend(rows)
 
@@ -401,6 +428,8 @@ def _user_ids_with_predictions(round_id: int) -> list[int]:
         PoleTimePrediction, FastestLapPrediction,
         DnfCountPrediction,
         PlacesGainedPrediction, QualiRandomDriverPrediction,
+        QualiHeadToHeadPrediction, QualiNthPrediction,
+        SpecialPrediction,
     ):
         rows = db.session.query(model.user_id).filter(model.round_id == round_id).distinct().all()
         user_id_sets.append({r[0] for r in rows})
@@ -411,6 +440,9 @@ def _user_ids_with_predictions(round_id: int) -> list[int]:
 
 def _load_user_predictions(user_id: int, round_id: int) -> UserPredictions:
     """Materialise all of a user's predictions for a round into a UserPredictions."""
+    specials_rows = db.session.query(SpecialPrediction).filter_by(
+        user_id=user_id, round_id=round_id,
+    ).all()
     return UserPredictions(
         top10=db.session.query(Top10Prediction).filter_by(user_id=user_id, round_id=round_id).all(),
         quali_top3=db.session.query(Top3QualiPrediction).filter_by(user_id=user_id, round_id=round_id).all(),
@@ -420,6 +452,9 @@ def _load_user_predictions(user_id: int, round_id: int) -> UserPredictions:
         dnf_count=db.session.query(DnfCountPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
         places_gained=db.session.query(PlacesGainedPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
         quali_random_driver=db.session.query(QualiRandomDriverPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
+        qh2h=db.session.query(QualiHeadToHeadPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
+        qnth=db.session.query(QualiNthPrediction).filter_by(user_id=user_id, round_id=round_id).one_or_none(),
+        specials={p.special_key: p for p in specials_rows},
     )
 
 

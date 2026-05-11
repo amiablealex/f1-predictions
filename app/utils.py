@@ -24,11 +24,15 @@ from app.models.prediction import (
     PoleTimePrediction,
     PredictionScore,
     PredictionType,
+    QualiHeadToHeadPrediction,
+    QualiNthPrediction,
     QualiRandomDriverPrediction,
+    SpecialPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
 )
+from app.models.special import SpecialOutcome
 from app.models.result import SessionResult
 from app.models.round import (
     Round,
@@ -163,6 +167,20 @@ class DriverChoice:
     car_number: int
 
 
+@dataclass
+class TeamChoice:
+    name: str          # canonical team name (matches RoundDriver.constructor_name)
+    label: str         # display label (currently same as name)
+
+
+def round_team_choices(round_obj: Round) -> list[TeamChoice]:
+    """Distinct constructor names for the round, alphabetically."""
+    names: set[str] = {
+        rd.constructor_name for rd in round_obj.round_drivers if rd.constructor_name
+    }
+    return [TeamChoice(name=n, label=n) for n in sorted(names)]
+
+
 def round_driver_choices(round_obj: Round) -> list[DriverChoice]:
     """Build the driver-picker list for a round's prediction form."""
     rows = (
@@ -253,11 +271,17 @@ class RoundUserState:
     dnf_count: DnfCountPrediction | None
     places_gained: PlacesGainedPrediction | None
     quali_random_driver: QualiRandomDriverPrediction | None
+    qh2h: "QualiHeadToHeadPrediction | None"
+    qnth: "QualiNthPrediction | None"
+    specials: dict[str, "SpecialPrediction"]
+    special_outcomes: dict[str, "SpecialOutcome"]
     # Display helpers (populated for the round-detail view)
     top_mover_driver: Driver | None
     top_mover_places: int | None
-    # Scores indexed by (kind, position-or-None)
+    # Scores indexed by (kind, position-or-None) for non-special rows.
     scores: dict[tuple[PredictionType, int | None], PredictionScore]
+    # Score rows for specials, keyed by special_key.
+    special_scores: dict[str, PredictionScore]
     total_points: int
 
 
@@ -282,6 +306,8 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
             joinedload(Round.sessions).joinedload(Session.results),
             joinedload(Round.round_drivers).joinedload(RoundDriver.expected_driver),
             joinedload(Round.random_quali_driver).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.qh2h_driver_a).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.qh2h_driver_b).joinedload(RoundDriver.expected_driver),
         )
         .filter(Round.id == round_id)
         .one_or_none()
@@ -307,11 +333,28 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         user_id=user_id, round_id=round_id).one_or_none()
     quali_random_driver = db.session.query(QualiRandomDriverPrediction).filter_by(
         user_id=user_id, round_id=round_id).one_or_none()
+    qh2h = db.session.query(QualiHeadToHeadPrediction).filter_by(
+        user_id=user_id, round_id=round_id).one_or_none()
+    qnth = db.session.query(QualiNthPrediction).filter_by(
+        user_id=user_id, round_id=round_id).one_or_none()
+    specials_rows = db.session.query(SpecialPrediction).filter_by(
+        user_id=user_id, round_id=round_id).all()
+    specials = {p.special_key: p for p in specials_rows}
+    outcomes_rows = db.session.query(SpecialOutcome).filter_by(
+        round_id=round_id).all()
+    special_outcomes = {o.special_key: o for o in outcomes_rows}
 
     score_rows = db.session.query(PredictionScore).filter_by(
         user_id=user_id, round_id=round_id,
     ).all()
-    scores = {(s.kind, s.position): s for s in score_rows}
+    scores = {
+        (s.kind, s.position): s for s in score_rows
+        if s.kind != PredictionType.SPECIAL
+    }
+    special_scores = {
+        s.special_key: s for s in score_rows
+        if s.kind == PredictionType.SPECIAL and s.special_key is not None
+    }
     total_points = sum(s.points for s in score_rows)
 
     top_mover_driver, top_mover_places = compute_top_mover(rd)
@@ -328,9 +371,13 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         fastest_lap=fastest_lap, dnf_count=dnf_count,
         places_gained=places_gained,
         quali_random_driver=quali_random_driver,
+        qh2h=qh2h, qnth=qnth,
+        specials=specials,
+        special_outcomes=special_outcomes,
         top_mover_driver=top_mover_driver,
         top_mover_places=top_mover_places,
-        scores=scores, total_points=total_points,
+        scores=scores, special_scores=special_scores,
+        total_points=total_points,
     )
 
 
@@ -354,15 +401,18 @@ _POINTS_BUCKETS: dict[str, list[tuple[int, str]]] = {
     "sprint_top3":         [(5, "p10"), (2, "p5"), (0, "p0")],
     "quali_top3":          [(5, "p10"), (2, "p5"), (1, "p2"), (0, "p0")],
     "quali_random_driver": [(5, "p10"), (2, "p5"), (1, "p2"), (0, "p0")],
+    "quali_h2h":           [(5, "p10"), (0, "p0")],
+    "quali_nth":           [(5, "p10"), (2, "p5"), (1, "p2"), (0, "p0")],
     "pole_time":           [(10, "p10"), (5, "p5"), (0, "p0")],
     "fastest_lap":         [(10, "p10"), (0, "p0")],
     "dnf_count":           [(10, "p10"), (5, "p5"), (0, "p0")],
     "places_gained":       [(5, "p10"), (1, "p5"), (0, "p0")],
+    "special":             [(10, "p10"), (0, "p0")],
     # Generic fallback preserves old behaviour for any caller that doesn't
     # specify a category.
     "generic":             [(10, "p10"), (5, "p5"), (2, "p2"), (0, "p0")],
 }
-_CATEGORIES_WITH_NEGATIVE = {"quali_top3", "quali_random_driver", "places_gained"}
+_CATEGORIES_WITH_NEGATIVE = {"quali_top3", "quali_random_driver", "quali_nth", "places_gained"}
 
 
 def points_class(points: int | None, category: str = "generic") -> str:

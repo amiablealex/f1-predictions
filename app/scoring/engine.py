@@ -29,7 +29,10 @@ from app.models.prediction import (
     PoleTimePrediction,
     PredictionScore,
     PredictionType,
+    QualiHeadToHeadPrediction,
+    QualiNthPrediction,
     QualiRandomDriverPrediction,
+    SpecialPrediction,
     Top3QualiPrediction,
     Top3SprintPrediction,
     Top10Prediction,
@@ -58,6 +61,11 @@ class UserPredictions:
     dnf_count: DnfCountPrediction | None = None
     places_gained: PlacesGainedPrediction | None = None
     quali_random_driver: QualiRandomDriverPrediction | None = None
+    qh2h: QualiHeadToHeadPrediction | None = None
+    qnth: QualiNthPrediction | None = None
+    # Keyed by special_key — only contains entries for specials the user
+    # actually submitted predictions for.
+    specials: dict[str, "SpecialPrediction"] = field(default_factory=dict)
 
 
 # =============================================================================
@@ -194,6 +202,52 @@ def score_quali_random_driver(
     return _score_quali_position_bucketed(
         predicted_position, actual.position, config,
     )
+
+
+def score_quali_h2h(
+    predicted_driver_id: int,
+    qh2h_driver_a: RoundDriver,
+    qh2h_driver_b: RoundDriver,
+    quali_results: list[SessionResult],
+    config: RoundScoringConfig,
+) -> int:
+    """Binary scoring for the head-to-head wager.
+
+    Compares the two pre-selected teammates' actual qualifying positions
+    by car number (substitution-aware). The user wins if they picked the
+    higher-qualifying one. DNQ handling: a teammate with no quali result
+    loses against one who set a time; if both DNQ'd, no scoring.
+    """
+    res_a = _result_for_car(qh2h_driver_a.car_number, quali_results)
+    res_b = _result_for_car(qh2h_driver_b.car_number, quali_results)
+    if res_a is None and res_b is None:
+        return 0
+    if res_a is None:
+        winner_driver_id = qh2h_driver_b.expected_driver_id
+    elif res_b is None:
+        winner_driver_id = qh2h_driver_a.expected_driver_id
+    elif res_a.position < res_b.position:
+        winner_driver_id = qh2h_driver_a.expected_driver_id
+    else:
+        winner_driver_id = qh2h_driver_b.expected_driver_id
+    return config.qh2h_correct if predicted_driver_id == winner_driver_id else 0
+
+
+def score_quali_nth(
+    predicted_driver_id: int,
+    n: int,
+    quali_results: list[SessionResult],
+    round_drivers: list[RoundDriver],
+    config: RoundScoringConfig,
+) -> int:
+    """Bucketed scoring on |actual position of picked driver - N|.
+
+    Driver not in quali results (DNS) → 0 points.
+    """
+    actual = _resolve_actual_result(predicted_driver_id, round_drivers, quali_results)
+    if actual is None:
+        return 0
+    return _score_quali_position_bucketed(n, actual.position, config)
 
 
 def score_sprint_top3_slot(
@@ -420,6 +474,38 @@ def build_quali_phase_scores(
         user_id=user_id, round_id=round_id,
         kind=PredictionType.QUALI_RANDOM_DRIVER, position=None, points=pts,
     ))
+
+    # ---- Quali head-to-head (single row) ----
+    if (
+        user_preds.qh2h is not None
+        and round_obj.qh2h_driver_a is not None
+        and round_obj.qh2h_driver_b is not None
+    ):
+        pts = score_quali_h2h(
+            user_preds.qh2h.predicted_driver_id,
+            round_obj.qh2h_driver_a, round_obj.qh2h_driver_b,
+            quali_results, config,
+        )
+    else:
+        pts = 0
+    scores.append(PredictionScore(
+        user_id=user_id, round_id=round_id,
+        kind=PredictionType.QUALI_HEAD_TO_HEAD, position=None, points=pts,
+    ))
+
+    # ---- Quali Nth (single row) ----
+    if user_preds.qnth is not None and round_obj.quali_nth_position is not None:
+        pts = score_quali_nth(
+            user_preds.qnth.predicted_driver_id,
+            round_obj.quali_nth_position,
+            quali_results, round_drivers, config,
+        )
+    else:
+        pts = 0
+    scores.append(PredictionScore(
+        user_id=user_id, round_id=round_id,
+        kind=PredictionType.QUALI_NTH, position=None, points=pts,
+    ))
     return scores
 
 
@@ -430,8 +516,10 @@ def build_race_phase_scores(
     race_session: Session,
     round_drivers: list[RoundDriver],
     config: RoundScoringConfig,
+    round_obj: "Round",
+    special_outcomes_by_key: dict[str, "SpecialOutcome"],
 ) -> list[PredictionScore]:
-    """RACE phase reveal: race top 10 + fastest lap + DNF count + places gained."""
+    """RACE phase reveal: race top 10, fastest lap, DNF count, places gained, specials."""
     scores: list[PredictionScore] = []
     race_results = list(race_session.results)
 
@@ -489,6 +577,20 @@ def build_race_phase_scores(
         user_id=user_id, round_id=round_id,
         kind=PredictionType.PLACES_GAINED, position=None, points=pts,
     ))
+
+    # ---- Specials (two rows — one per active special on this round) ----
+    from app.scoring.specials import score_special   # local import to avoid cycle
+    for special_key in (round_obj.special_a_key, round_obj.special_b_key):
+        if not special_key:
+            continue
+        prediction = user_preds.specials.get(special_key)
+        outcome = special_outcomes_by_key.get(special_key)
+        pts = score_special(prediction, outcome, config)
+        scores.append(PredictionScore(
+            user_id=user_id, round_id=round_id,
+            kind=PredictionType.SPECIAL,
+            position=None, special_key=special_key, points=pts,
+        ))
     return scores
 
 
@@ -506,8 +608,11 @@ def build_phase_scores(
     round_drivers: list[RoundDriver],
     config: RoundScoringConfig,
     round_obj: Round,
+    special_outcomes_by_key: dict[str, "SpecialOutcome"] | None = None,
 ) -> list[PredictionScore]:
     """Top-level dispatch — call from the worker."""
+    if special_outcomes_by_key is None:
+        special_outcomes_by_key = {}
     if phase == ScoringPhase.SPRINT:
         return build_sprint_phase_scores(
             user_id, round_id, user_preds,
@@ -525,5 +630,6 @@ def build_phase_scores(
         race = sessions_by_type[SessionType.RACE]
         return build_race_phase_scores(
             user_id, round_id, user_preds, race, round_drivers, config,
+            round_obj, special_outcomes_by_key,
         )
     raise ValueError(f"Unknown scoring phase: {phase}")

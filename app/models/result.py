@@ -1,7 +1,7 @@
 """Per-session per-car results, populated by the worker after a session ends."""
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -47,6 +47,17 @@ class SessionResult(db.Model):
     # starts come through as 0; nullable for old rows ingested before this
     # column existed (and for qualifying-only sessions).
     grid_position: Mapped[int | None] = mapped_column(Integer)
+
+    # For races: number of laps the driver actually completed. Used by
+    # the first-retirement and longest-stint specials. Nullable for
+    # rows ingested before this column existed, and for qualifying sessions.
+    laps_completed: Mapped[int | None] = mapped_column(Integer)
+
+    # For races: raw race time in ms (Jolpica's Time.millis), for
+    # classified finishers. Used by the margin-of-victory special.
+    # Subtract P1 from P2 for the leader gap. Nullable: missing for
+    # lapped/retired/qualifying-session rows.
+    race_time_ms: Mapped[int | None] = mapped_column(BigInteger)
 
     session = relationship("Session", back_populates="results")
     actual_driver = relationship("Driver")

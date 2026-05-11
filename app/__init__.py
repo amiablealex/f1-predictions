@@ -41,6 +41,9 @@ def create_app(config_class=None) -> Flask:
     _register_user_loader()
     _register_jinja_helpers(app)
 
+    from app.cli import backfill_phase4
+    app.cli.add_command(backfill_phase4)
+
     return app
 
 
@@ -147,6 +150,7 @@ def _register_jinja_helpers(app: Flask) -> None:
     # readable names without dotted attribute access on enum classes.
     from app.models.prediction import PredictionType
     from app.models.round import SessionType
+    from app.specials import SPECIALS_BY_KEY
     app.jinja_env.globals.update(
         SESSION_QUALI=SessionType.QUALIFYING,
         SESSION_RACE=SessionType.RACE,
@@ -160,4 +164,8 @@ def _register_jinja_helpers(app: Flask) -> None:
         PT_DNF_COUNT=PredictionType.DNF_COUNT,
         PT_PLACES_GAINED=PredictionType.PLACES_GAINED,
         PT_QUALI_RANDOM_DRIVER=PredictionType.QUALI_RANDOM_DRIVER,
+        PT_QUALI_HEAD_TO_HEAD=PredictionType.QUALI_HEAD_TO_HEAD,
+        PT_QUALI_NTH=PredictionType.QUALI_NTH,
+        PT_SPECIAL=PredictionType.SPECIAL,
+        SPECIALS_BY_KEY=SPECIALS_BY_KEY,
     )
