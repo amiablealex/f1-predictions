@@ -58,14 +58,16 @@
 </section>
 
 <section class="card">
-  <h3>Sprint weekends</h3>
-  <p class="small muted">
-    Predictions on a sprint weekend lock 1 hour before sprint qualifying on Friday.
-  </p>
+  <h3>Sprint Race — Top 3</h3>
+  <p class="small muted">Sprint weekends only. Predictions lock 1 hour before sprint qualifying on Friday.</p>
   <ul>
-    <li><strong>Sprint race top 3:</strong>
-      <span class="{{ cfg.sprint_top3_correct|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_correct }}</span> exact,
-      <span class="{{ cfg.sprint_top3_one_off|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_one_off }}</span> off by one.
+    <li>
+      <span class="{{ cfg.sprint_top3_correct|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_correct }}</span>
+      exact position
+    </li>
+    <li>
+      <span class="{{ cfg.sprint_top3_one_off|points_class('sprint_top3') }}">+{{ cfg.sprint_top3_one_off }}</span>
+      off by one
     </li>
   </ul>
 </section>
