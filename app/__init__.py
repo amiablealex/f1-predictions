@@ -68,6 +68,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.predictions.routes import predictions_bp
     from app.rounds.routes import rounds_bp
     from app.rules.routes import rules_bp
+    from app.invite.routes import invite_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(predictions_bp)                          # /predictions
@@ -76,6 +77,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(leaderboard_bp, url_prefix="/leaderboard")
     app.register_blueprint(rules_bp, url_prefix="/rules")
     app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(invite_bp, url_prefix="/invite")
 
     @app.route("/health")
     def health():

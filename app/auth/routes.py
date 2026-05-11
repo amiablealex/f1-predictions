@@ -21,6 +21,7 @@ from app.auth.forms import (
 from app.extensions import db
 from app.models.user import PasswordResetToken, User
 from app.auth.rate_limit import is_blocked, record_failure, reset, retry_after_seconds
+from app.invite.routes import consume_pending_invite
 
 auth_bp = Blueprint("auth", __name__, template_folder="../templates")
 
@@ -66,6 +67,14 @@ def register():
         user.last_login_at = _utcnow()
         db.session.commit()
 
+        joined, is_new = consume_pending_invite(user)
+        if joined:
+            if is_new:
+                flash(f"Account created — joined {joined.name}.", "success")
+            else:
+                flash(f"Account created. You're already in {joined.name}.", "info")
+            return redirect(url_for("leaderboard.view", league_id=joined.id))
+
         flash("Account created — welcome.", "success")
         return redirect(url_for("index"))
 
@@ -105,6 +114,14 @@ def login():
         login_user(user, remember=form.remember.data)
         user.last_login_at = _utcnow()
         db.session.commit()
+
+        joined, is_new = consume_pending_invite(user)
+        if joined:
+            if is_new:
+                flash(f"Joined {joined.name}.", "success")
+            else:
+                flash(f"You're already in {joined.name}.", "info")
+            return redirect(url_for("leaderboard.view", league_id=joined.id))
 
         next_url = request.args.get("next")
         if _is_safe_redirect(next_url):

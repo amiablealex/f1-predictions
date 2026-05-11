@@ -8,6 +8,11 @@
 
 <div class="row" style="gap:8px;margin-bottom:1rem;">
   <a href="{{ url_for('leaderboard.view', league_id=league.id) }}" class="btn btn--primary">Leaderboard</a>
+  <button type="button" class="btn btn--secondary" data-share-league
+          data-share-url="{{ url_for('invite.landing', code=league.invite_code, _external=True) }}"
+          data-share-text="Join my F1 predictions league: ">
+    Share invite
+  </button>
 </div>
 
 <section class="card">
@@ -57,4 +62,49 @@
   </form>
 </section>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  document.querySelectorAll('[data-share-league]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const url = btn.dataset.shareUrl;
+      const text = btn.dataset.shareText;
+      const fullText = text + url;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({ url, text });
+          return;
+        } catch (e) {
+          return; // user cancelled — leave the page alone
+        }
+      }
+
+      // Clipboard fallback
+      const flash = () => {
+        const original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = original; }, 2000);
+      };
+
+      try {
+        await navigator.clipboard.writeText(fullText);
+        flash();
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = fullText;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta);
+        flash();
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

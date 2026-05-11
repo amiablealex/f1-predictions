@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-page">
+  <div class="welcome">
+    <p class="welcome__lede">
+      You've been invited to join<br>
+      <strong>{{ league.name }}</strong>.
+    </p>
+    <p class="welcome__footnote small muted">
+      Predict each Grand Prix. Closer to the truth, more points.
+    </p>
+  </div>
+
+  <div class="row" style="gap:8px;justify-content:center;">
+    <a href="{{ url_for('auth.register') }}" class="btn btn--primary">Create account</a>
+    <a href="{{ url_for('auth.login') }}" class="btn btn--secondary">Sign in</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-page">
+  <div class="welcome">
+    <p class="welcome__lede">
+      You've been invited to join<br>
+      <strong>{{ league.name }}</strong>.
+    </p>
+  </div>
+
+  <form method="post" action="{{ url_for('invite.join', code=league.invite_code) }}" class="form">
+    {{ form.hidden_tag() }}
+    <button type="submit" class="btn btn--primary btn--block">Join {{ league.name }}</button>
+  </form>
+
+  <p class="small muted" style="text-align:center;margin-top:1rem;">
+    Not interested? <a href="{{ url_for('index') }}">Carry on</a>
+  </p>
+</section>
+{% endblock %}

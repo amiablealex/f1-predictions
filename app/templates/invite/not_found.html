@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth-page">
+  <div class="welcome">
+    <p class="welcome__lede">
+      That invite link doesn't lead anywhere.
+    </p>
+    <p class="welcome__footnote small muted">
+      The league may have been deleted, or the link mistyped.
+    </p>
+  </div>
+
+  <div class="row" style="gap:8px;justify-content:center;">
+    {% if current_user.is_authenticated %}
+      <a href="{{ url_for('leagues.join') }}" class="btn btn--secondary">Enter a code</a>
+    {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn--secondary">Sign in</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
