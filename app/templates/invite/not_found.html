@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="auth-page">
+  <div class="auth-page__hero">
+    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" alt="F1 Car Sketch" class="hero-image">
+  </div>
+
   <div class="welcome">
     <p class="welcome__lede">
       That invite link doesn't lead anywhere.
