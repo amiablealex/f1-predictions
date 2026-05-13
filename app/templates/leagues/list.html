@@ -8,8 +8,10 @@
 </div>
 
 {% if not leagues %}
-  <section class="card" style="text-align:center;">
-    <p class="muted">You're not in any leagues. Either start one, or get a code from someone who has.</p>
+  <section class="card" style="text-align:center; padding: var(--space-8) var(--space-4);">
+    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="empty-hero-image">
+    <h3 class="muted">You're not in any leagues.</h3>
+    <p class="muted small">Start your own competition or join one with a code.</p>
   </section>
 {% else %}
   {% for league in leagues %}
@@ -23,5 +25,12 @@
       </div>
     </section>
   {% endfor %}
+
+  <div class="maker-mark" style="margin-top: var(--space-6);">
+    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
+    <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
+      F1 Predictions
+    </span>
+  </div>
 {% endif %}
 {% endblock %}

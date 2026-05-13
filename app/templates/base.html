@@ -54,6 +54,8 @@
 
     {% if current_user.is_authenticated %}
       <nav class="drawer" id="drawer" aria-hidden="true">
+        <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" 
+               alt="" class="nav-brand-image">
         <ul class="drawer__list">
           <li><a href="{{ url_for('predictions.edit') }}" class="drawer__link">Predictions</a></li>
           <li><a href="{{ url_for('rounds.list') }}" class="drawer__link">Results</a></li>

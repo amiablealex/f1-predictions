@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card" style="text-align:center;">
-  <h2>No leagues</h2>
-  <p class="muted">Leaderboards live inside leagues. You'll need at least one.</p>
-  <div class="row" style="gap:8px;justify-content:center;margin-top:1rem;">
+
+<section class="card" style="text-align:center; padding: var(--space-8) var(--space-4);">
+  <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="empty-hero-image">
+  <h3 class="muted">No leagues found</h3>
+  <p class="muted small">Start your own competition or join one with a code.</p>
+  <div class="row" style="gap:8px;justify-content:center;margin-top:1rem;margin-bottom:var(--space-6);">
     <a href="{{ url_for('leagues.new') }}" class="btn btn--primary">Create</a>
     <a href="{{ url_for('leagues.join') }}" class="btn btn--secondary">Join</a>
   </div>
 </section>
+
 {% endblock %}

@@ -556,33 +556,61 @@ p { margin: 0 0 var(--space-3) 0; }
 .rounds-list-row__name { font-weight: 500; }
 .rounds-list-row__right { display: flex; align-items: center; gap: var(--space-3); }
 
-/* --- PNG Hero Styling --- */
+/* --- Global Car Sketch Variants (Optimized for Trimmed PNG) --- */
+
+/* 1. Main Hero (Login/Invite Pages) */
 .auth-page__hero {
   width: 100%;
   display: flex;
   justify-content: center;
-  overflow: hidden;
   margin-bottom: var(--space-4);
-  /* Adjust height to crop the tall PNG canvas to just the car */
-  height: 180px; 
 }
 
 .hero-image {
+  /* This fulfills your 80% size preference */
   width: 80%;
-  height: 80%;
-  object-fit: cover; /* This crops the image to focus on the car */
-  
-  /* Blends the image background into your CSS parchment background */
-  mix-blend-mode: multiply; 
-  
-  /* Matches your muted theme */
+  max-width: 320px;
+  height: auto;
+  mix-blend-mode: multiply;
   opacity: 0.8;
   filter: contrast(1.1) sepia(0.2);
 }
 
-/* On very small screens, keep the car from feeling cramped */
-@media (max-width: 350px) {
-  .auth-page__hero {
-    height: 140px;
-  }
+/* 2. Brand Header (Hamburger Menu) */
+.nav-brand-image {
+  display: block;
+  width: 175px;
+  margin-bottom: var(--space-4);
+  margin-left: var(--space-2);
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  filter: sepia(0.2);
+}
+
+/* 3. Empty State Hero (e.g., No Leagues) */
+.empty-hero-image {
+  display: block;
+  width: 200px;
+  margin: 4rem auto;
+  opacity: 0.7;
+  mix-blend-mode: multiply;
+  filter: sepia(0.2);
+}
+
+/* 4. Maker's Mark (Footer) */
+.maker-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: var(--space-8) 0 var(--space-4);
+  opacity: 0.4;
+  text-align: center;
+}
+
+.maker-mark-image {
+  width: 100px; /* Increased size as requested */
+  height: auto;
+  mix-blend-mode: multiply;
+  filter: grayscale(1) sepia(0.2);
+  margin-bottom: var(--space-1);
 }
