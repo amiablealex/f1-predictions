@@ -163,9 +163,9 @@
     {% if rd.qh2h_driver_a and rd.qh2h_driver_b %}
       <div class="pred-row">
         <div class="pred-row__label small muted">
-          {{ rd.qh2h_driver_a.expected_driver|driver_label }}
-          vs
-          {{ rd.qh2h_driver_b.expected_driver|driver_label }}
+          <div>{{ rd.qh2h_driver_a.expected_driver|driver_label }}</div>
+          <div>vs</div>
+          <div>{{ rd.qh2h_driver_b.expected_driver|driver_label }}</div>
         </div>
         <div class="pred-row__predicted">
           {%- if state.qh2h and state.qh2h.predicted_driver_id in drivers -%}
@@ -305,7 +305,7 @@
               {%- for wid in winner_ids -%}
                 {%- set di = wid|int -%}
                 {%- if di in drivers -%}
-                  {{ drivers[di]|driver_label }}{% if not loop.last %}, {% endif %}
+                  {{ drivers[di]|driver_label }}{% if not loop.last %}<br>{% endif %}
                 {%- endif -%}
               {%- endfor -%}
             {%- elif sp.input_type == 'int' -%}

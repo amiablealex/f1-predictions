@@ -21,8 +21,14 @@
 </section>
 
 <section class="card">
-  <h3>Qualifying — Top 3 + a random driver</h3>
-  <p>Predict the top 3 finishers in qualifying. Each round also picks one random driver and asks where they'll qualify — same driver for everyone in your league. All four predictions use the same scale: closer is better, and far-off guesses cost you.</p>
+  <h3>Qualifying</h3>
+  <p>Four position-based qualifying predictions, all sharing the same scoring scale: closer to the actual position is better, and far-off guesses cost you.</p>
+  <ul>
+    <li><strong>Top 3</strong> — pick who finishes P1, P2, P3.</li>
+    <li><strong>Random driver</strong> — each round picks one driver and asks where they'll qualify. Same driver for everyone in your league.</li>
+    <li><strong>Random grid position</strong> — each round picks a position N (between 11 and the last grid slot). Pick the driver you think will qualify there.</li>
+  </ul>
+  <p class="small muted" style="margin-top:0.5rem;">Shared scoring scale:</p>
   <ul>
     {% set ns = namespace(prev_max=-1) %}
     {% for bucket in cfg.quali_position_buckets %}
@@ -55,11 +61,6 @@
     <li><span class="pill pill--p0">0</span> pick the lower</li>
   </ul>
   <p class="small muted">If one teammate fails to set a time, the one who did wins. If both fail, no scoring.</p>
-</section>
-
-<section class="card">
-  <h3>Who will qualify Nth?</h3>
-  <p>Each round picks a grid position N (between 11 and the last grid slot). Pick the driver you think will qualify exactly there. Scored the same way as the quali top 3 — by how close their actual position is to N.</p>
 </section>
 
 <section class="card">
@@ -109,7 +110,10 @@
 
 <section class="card">
   <h3>Specials</h3>
-  <p>Each round draws two from a rotating bank of eight. Each is worth +10 if you get it right, else 0.</p>
+  <p>Each round draws two from a rotating bank of eight.
+    <span class="pill pill--p10">+10</span> if you get it right, else
+    <span class="pill pill--p0">0</span>.
+  </p>
   <ul>
     <li><strong>First driver to retire</strong> — pick the driver. No score if no DNFs. Ties on retirement lap: any pick of a tied driver scores.</li>
     <li><strong>Most pit stops by any driver</strong> — pick the exact number. Ties on max count: any pick of a tied driver scores.</li>
