@@ -56,7 +56,7 @@
   </div>
 {% endif %}
 
-<div class="row row--space" style="margin-bottom:1rem;">
+<div class="row row--space" style="margin-bottom:1rem; align-items:center;">
   <div class="muted small">
     {% if state.is_locked %}
       Locked
@@ -66,7 +66,7 @@
   </div>
   <div class="row">
     <span class="small muted">Total</span>
-    <span class="pill pill--p10 tabular">{{ state.total_points }}</span>
+    <span class="total-score-pill">{{ state.total_points }}</span>
   </div>
 </div>
 

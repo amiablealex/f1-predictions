@@ -637,3 +637,18 @@ p { margin: 0 0 var(--space-3) 0; }
   font-variant-numeric: tabular-nums;
   margin-left: 0.15rem;
 }
+
+.total-score-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1;
+  background: var(--c-surface-alt);
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
