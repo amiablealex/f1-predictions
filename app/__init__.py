@@ -44,6 +44,9 @@ def create_app(config_class=None) -> Flask:
     from app.cli import backfill_phase4
     app.cli.add_command(backfill_phase4)
 
+    from app.cli import seed_test_predictions
+    app.cli.add_command(seed_test_predictions)
+
     return app
 
 
