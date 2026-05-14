@@ -5,8 +5,10 @@
 {{ round_header(round_obj) }}
 
 <p class="muted small">
-  Locks <strong>{{ round_obj.predictions_deadline|deadline_phrase }}</strong>.
-  Whatever's saved at that point is what gets scored.
+  Locks <strong>{{ round_obj.predictions_deadline|deadline_phrase }}</strong>
+  <span data-countdown="{{ round_obj.predictions_deadline.isoformat() }}"
+        class="countdown"></span>
+  · Whatever's saved at that point is what gets scored.
 </p>
 
 <form method="post" action="{{ url_for('predictions.submit') }}" class="form predictions-form">
