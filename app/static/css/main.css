@@ -207,6 +207,27 @@ p { margin: 0 0 var(--space-3) 0; }
 .drawer__link--button { font: inherit; cursor: pointer; }
 .drawer__signout-form { margin: 0; }
 
+.drawer__footer {
+  list-style: none;
+  margin: var(--space-5) 0 0 0;
+  padding: var(--space-3) 0 0 0;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.drawer__footer-link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  color: var(--c-ink-muted);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+}
+.drawer__footer-link:hover {
+  background: var(--c-surface-alt);
+  color: var(--c-ink);
+}
+
 .drawer-scrim {
   position: fixed;
   inset: 0;

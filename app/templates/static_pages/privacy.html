@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Privacy</h1>
+<p class="muted small">Short version: this is a hobby project run by one person. Your data isn't going anywhere it shouldn't.</p>
+
+<section class="card">
+  <h3>What's stored</h3>
+  <ul>
+    <li><strong>Your email.</strong> Used for login and password reset. That's it.</li>
+    <li><strong>Your username.</strong> Visible to other members of leagues you join.</li>
+    <li><strong>A hash of your password.</strong> The plain text is never seen or stored. If you forget it, you'll need to reset — not even the admin can recover it.</li>
+    <li><strong>Your predictions and scores.</strong> Visible to other members of your leagues, because that's the whole point.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>What isn't</h3>
+  <ul>
+    <li>No tracking. No analytics. No ad networks. Nothing on this site reports back to a third party about what you clicked.</li>
+    <li>Your email isn't shared, sold, used for marketing, or rented to anyone wanting to sell you a sim rig.</li>
+    <li>Cookies are strictly the ones needed to keep you logged in. Nothing else.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h3>Where the data lives</h3>
+  <p>The app and database are hosted on <a href="https://railway.app" target="_blank" rel="noopener">Railway</a> (US infrastructure). Backups are taken nightly. Password reset emails are sent via <a href="https://resend.com" target="_blank" rel="noopener">Resend</a>; no other email is sent from this app.</p>
+</section>
+
+<section class="card">
+  <h3>Your rights</h3>
+  <p>You can delete your account at any time from the <a href="{{ url_for('auth.account') }}">Account</a> page — it removes you and your predictions completely. If you'd rather have a copy of your data first, or there's anything else you'd like to ask, email <a href="mailto:kitsniff.app@gmail.com">kitsniff.app@gmail.com</a>.</p>
+</section>
+
+<section class="card">
+  <h3>Contact</h3>
+  <p>Anything privacy-shaped: <a href="mailto:kitsniff.app@gmail.com">kitsniff.app@gmail.com</a>.</p>
+  <p class="small muted">This policy applies under UK and EU data protection law. Last updated: 15 May 2026.</p>
+</section>
+{% endblock %}

@@ -89,6 +89,12 @@
             </form>
           </li>
         </ul>
+
+        <ul class="drawer__footer">
+          <li><a href="{{ url_for('rules.about') }}" class="drawer__footer-link">About</a></li>
+          <li><a href="{{ url_for('rules.privacy') }}" class="drawer__footer-link">Privacy</a></li>
+        </ul>
+
       </nav>
       <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
     {% endif %}

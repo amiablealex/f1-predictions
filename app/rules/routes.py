@@ -18,3 +18,12 @@ def index():
         deadline_offset_minutes=deadline_offset,
         title="How to play",
     )
+
+@rules_bp.route("/about")
+def about():
+    return render_template("static_pages/about.html", title="About")
+
+
+@rules_bp.route("/privacy")
+def privacy():
+    return render_template("static_pages/privacy.html", title="Privacy")
