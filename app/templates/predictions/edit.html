@@ -171,15 +171,30 @@
 // Pole time input mask + empty-state tracker for prediction fields.
 // Inline because both behaviours are scoped to this template only.
 (function () {
+  const form = document.querySelector('form.predictions-form');
+  if (!form) return;
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  // ---- Submit button state ---------------------------------------------
+  // Single source of truth: disabled whenever any field in the form
+  // carries the .field--error class. This coordinates naturally with the
+  // duplicate-driver detector in predictions.js, which uses the same class.
+  const updateSubmitState = () => {
+    if (!submitBtn) return;
+    submitBtn.disabled = form.querySelectorAll('.field--error').length > 0;
+  };
+  new MutationObserver(updateSubmitState).observe(form, {
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+
   // ---- Pole time mask + validation -------------------------------------
-  // User types digits only; ':' and '.' are inserted automatically.
-  // On blur, value is normalised (missing ms padded with zeros) or flagged
-  // invalid. Submit is blocked while invalid.
-  const pole = document.querySelector('input[name="pole_time"]');
+  const pole = form.querySelector('input[name="pole_time"]');
   if (pole) {
     const field = pole.closest('.field');
     const errorEl = field.querySelector('[data-pole-error]');
-  
+
     const format = (digits) => {
       digits = digits.slice(0, 6);
       if (digits.length === 0) return '';
@@ -188,8 +203,7 @@
       if (digits.length >= 4) out += '.' + digits.slice(3, 6);
       return out;
     };
-  
-    // Returns { valid: true, normalized } or { valid: false, message }.
+
     const validate = (value) => {
       const digits = value.replace(/\D/g, '');
       if (digits.length === 0) return { valid: true, normalized: '' };
@@ -203,7 +217,7 @@
       const ms = (digits.slice(3) + '000').slice(0, 3);
       return { valid: true, normalized: `${digits[0]}:${seconds}.${ms}` };
     };
-  
+
     const setError = (msg) => {
       field.classList.add('field--error');
       errorEl.textContent = msg;
@@ -214,14 +228,17 @@
       errorEl.textContent = '';
       errorEl.hidden = true;
     };
-  
-    // Mask runs every keystroke; any stale error is cleared while editing.
+
+    // While typing: keep the mask in sync and clear any stale error if
+    // the value has become valid. Never set new errors here — those wait
+    // until blur, so we don't nag mid-typing.
     pole.addEventListener('input', () => {
       pole.value = format(pole.value.replace(/\D/g, ''));
-      clearError();
+      const result = validate(pole.value);
+      if (result.valid) clearError();
     });
-  
-    // Validate + auto-pad ms when the user leaves the field.
+
+    // On blur: full check. Set error if invalid, normalise if valid.
     pole.addEventListener('blur', () => {
       const result = validate(pole.value);
       if (!result.valid) {
@@ -231,41 +248,42 @@
         if (result.normalized !== pole.value) pole.value = result.normalized;
       }
     });
-  
-    // Belt-and-braces: re-validate at submit time in case they never blurred.
-    const form = pole.closest('form');
-    if (form) {
-      form.addEventListener('submit', (e) => {
-        const result = validate(pole.value);
-        if (!result.valid) {
-          e.preventDefault();
-          setError(result.message);
-          pole.focus();
-          pole.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else if (result.normalized !== pole.value) {
-          pole.value = result.normalized;
-        }
-      });
+
+    // Safety net at submit time. The button is disabled while invalid,
+    // so this mainly catches the edge case of submission without blur.
+    form.addEventListener('submit', (e) => {
+      const result = validate(pole.value);
+      if (!result.valid) {
+        e.preventDefault();
+        setError(result.message);
+        pole.focus();
+        pole.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (result.normalized !== pole.value) {
+        pole.value = result.normalized;
+      }
+    });
+
+    // Normalise + validate any server-rendered value on page load.
+    if (pole.value) {
+      pole.value = format(pole.value.replace(/\D/g, ''));
+      const result = validate(pole.value);
+      if (!result.valid) setError(result.message);
     }
-  
-    // Normalise any server-rendered value on load.
-    if (pole.value) pole.value = format(pole.value.replace(/\D/g, ''));
   }
 
-  // ---- Empty-state tracker ----------------------------------------------
+  // ---- Empty-state tracker --------------------------------------------
   // Sets data-empty on any .field--prediction whose input has no value.
-  // CSS uses this to show / hide the red left-edge marker.
-  document.querySelectorAll('.field--prediction').forEach((field) => {
-    const radios = field.querySelectorAll('input[type="radio"]');
-    const input = field.querySelector('input:not([type="radio"]), select');
+  document.querySelectorAll('.field--prediction').forEach((f) => {
+    const radios = f.querySelectorAll('input[type="radio"]');
+    const input = f.querySelector('input:not([type="radio"]), select');
 
     const isEmpty = () => {
       if (radios.length > 0) return !Array.from(radios).some((r) => r.checked);
       return !input || !input.value;
     };
     const update = () => {
-      if (isEmpty()) field.setAttribute('data-empty', '');
-      else field.removeAttribute('data-empty');
+      if (isEmpty()) f.setAttribute('data-empty', '');
+      else f.removeAttribute('data-empty');
     };
 
     update();
@@ -275,6 +293,9 @@
     }
     radios.forEach((r) => r.addEventListener('change', update));
   });
+
+  // Initial button state (the observer only fires for future mutations).
+  updateSubmitState();
 })();
 </script>
 {% endblock %}
