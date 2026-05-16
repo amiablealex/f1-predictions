@@ -88,6 +88,12 @@
     </span>
   </div>
   <div class="phase-grid">
+    <div class="pred-row pred-row--head">
+      <div class="pred-row__label"></div>
+      <div class="pred-row__predicted">Pick</div>
+      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__points">Pts</div>
+    </div>
     {% for pos in [1, 2, 3] %}
       <div class="pred-row">
         <div class="pred-row__label small muted">Sprint P{{ pos }}</div>
@@ -115,6 +121,12 @@
     </span>
   </div>
   <div class="phase-grid">
+    <div class="pred-row pred-row--head">
+      <div class="pred-row__label"></div>
+      <div class="pred-row__predicted">Pick</div>
+      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__points">Pts</div>
+    </div>
     <div class="pred-row">
       <div class="pred-row__label small muted">Pole time</div>
       <div class="pred-row__predicted tabular">
@@ -214,6 +226,7 @@
         </div>
       </div>
     {% endif %}
+  </div>
 </section>
 
 
@@ -227,6 +240,12 @@
     </span>
   </div>
   <div class="phase-grid">
+    <div class="pred-row pred-row--head">
+      <div class="pred-row__label"></div>
+      <div class="pred-row__predicted">Pick</div>
+      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__points">Pts</div>
+    </div>
     {% for pos in range(1, 11) %}
       <div class="pred-row">
         <div class="pred-row__label small muted">Race P{{ pos }}</div>

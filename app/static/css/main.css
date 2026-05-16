@@ -673,3 +673,81 @@ p { margin: 0 0 var(--space-3) 0; }
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
 }
+
+/* =============================================================================
+   Additions for predictions edit + round view refresh.
+   Append to the bottom of main.css. (Replaces any prior additions block.)
+   ============================================================================= */
+
+/* --------------------------------------------- Inline positional field row */
+/* Used for the sequential Sprint/Quali/Race position picks where the label is
+   short (e.g. "P3") and density matters. */
+
+.field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+.field--inline > .field__label {
+  flex: 0 0 32px;
+  margin: 0;
+}
+.field--inline > .field__select,
+.field--inline > .field__input,
+.field--inline > select,
+.field--inline > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --------------------------------------------- Field-to-field spacing */
+/* Gives breathing room between adjacent fields inside the predictions form,
+   regardless of block or inline layout. */
+
+.predictions-form .field + .field {
+  margin-top: var(--space-3);
+}
+
+/* --------------------------------------------- Empty-state indicator */
+/* A subtle red bar on the left edge of any prediction field that has no
+   value yet — disappears once the user fills it in. Driven by the
+   `data-empty` attribute, which is managed by the small inline script
+   in edit.html. */
+
+.field--prediction {
+  border-left: 2px solid transparent;
+  padding-left: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  transition: border-color 160ms ease;
+}
+.field--prediction[data-empty] {
+  border-left-color: var(--c-accent);
+}
+
+/* --------------------------------------------- Sub-section header in cards */
+/* Used inside the Race card to separate Top-10 picks from Extras. */
+
+.card__subheader {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--c-ink);
+  margin: var(--space-5) 0 var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--c-border);
+}
+
+/* --------------------------------------------- Phase-grid column headers */
+/* Used in round.html — one header row at the top of each .phase-grid. */
+
+.pred-row--head {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-border);
+}
+.pred-row--head > div {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}

@@ -18,7 +18,7 @@
     <section class="card">
       <h3>Sprint Race — Top 3</h3>
       {% for pos in [1, 2, 3] %}
-        <div class="field">
+        <div class="field field--inline field--prediction">
           <label class="field__label">P{{ pos }}</label>
           {{ driver_select("sprint_top3_" ~ pos, choices, selected_id=existing.get("sprint_top3_" ~ pos)) }}
         </div>
@@ -28,21 +28,24 @@
 
   <section class="card">
     <h3>Qualifying</h3>
-    <div class="field">
+    <div class="field field--prediction">
       <label class="field__label">Pole lap time (e.g. 1:23.456)</label>
       <input type="text" name="pole_time" class="field__input"
              value="{{ existing.get('pole_time', '') }}"
              placeholder="M:SS.mmm"
+             inputmode="numeric"
+             pattern="[0-9:.]*"
+             maxlength="8"
              autocomplete="off">
     </div>
     {% for pos in [1, 2, 3] %}
-      <div class="field">
+      <div class="field field--inline field--prediction">
         <label class="field__label">P{{ pos }}</label>
         {{ driver_select("quali_top3_" ~ pos, choices, selected_id=existing.get("quali_top3_" ~ pos)) }}
       </div>
     {% endfor %}
     {% if random_driver %}
-      <div class="field">
+      <div class="field field--prediction">
         <label class="field__label">
           Where will {{ random_driver.expected_driver|driver_label }} qualify?
         </label>
@@ -55,7 +58,7 @@
     {% endif %}
 
     {% if qh2h_a and qh2h_b %}
-      <div class="field">
+      <div class="field field--prediction">
         <label class="field__label">
           Who will qualify higher:
           {{ qh2h_a.expected_driver|driver_label }}
@@ -67,7 +70,7 @@
     {% endif %}
 
     {% if quali_nth_position %}
-      <div class="field">
+      <div class="field field--prediction">
         <label class="field__label">
           Who will qualify P{{ quali_nth_position }}?
         </label>
@@ -79,25 +82,23 @@
   <section class="card">
     <h3>Race — Top 10</h3>
     {% for pos in range(1, 11) %}
-      <div class="field">
+      <div class="field field--inline field--prediction">
         <label class="field__label">P{{ pos }}</label>
         {{ driver_select("top10_" ~ pos, choices, selected_id=existing.get("top10_" ~ pos)) }}
       </div>
     {% endfor %}
-  </section>
 
-    <section class="card">
-    <h3>Extras</h3>
-    <div class="field">
+    <h4 class="card__subheader">Extras</h4>
+    <div class="field field--prediction">
       <label class="field__label">Fastest lap</label>
       {{ driver_select("fastest_lap", choices, selected_id=existing.get("fastest_lap")) }}
     </div>
-    <div class="field">
+    <div class="field field--prediction">
       <label class="field__label">Places gained — pick a driver</label>
       {{ driver_select("places_gained", choices, selected_id=existing.get("places_gained")) }}
       <small class="muted">Points = grid position − finish position. No cap, no floor.</small>
     </div>
-    <div class="field">
+    <div class="field field--prediction">
       <label class="field__label">Number of DNFs</label>
       <input type="number" name="dnf_count" class="field__input"
              min="0" max="20"
@@ -106,7 +107,7 @@
     </div>
 
     {% for sp in active_specials %}
-      <div class="field">
+      <div class="field field--prediction">
         <label class="field__label">{{ sp.label }}</label>
         {% if sp.input_type == 'driver_pick' %}
           {{ driver_select("special_" ~ sp.key ~ "_driver", choices,
@@ -165,4 +166,53 @@
 </form>
 
 <script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>
+
+<script>
+// Pole time input mask + empty-state tracker for prediction fields.
+// Inline because both behaviours are scoped to this template only.
+(function () {
+  // ---- Pole time mask ---------------------------------------------------
+  // User types digits only; ':' and '.' are inserted automatically.
+  const pole = document.querySelector('input[name="pole_time"]');
+  if (pole) {
+    const format = (digits) => {
+      digits = digits.slice(0, 6);
+      if (digits.length === 0) return '';
+      let out = digits[0];
+      if (digits.length >= 2) out += ':' + digits.slice(1, 3);
+      if (digits.length >= 4) out += '.' + digits.slice(3, 6);
+      return out;
+    };
+    const apply = () => {
+      pole.value = format(pole.value.replace(/\D/g, ''));
+    };
+    pole.addEventListener('input', apply);
+    if (pole.value) apply();  // normalise any server-rendered value
+  }
+
+  // ---- Empty-state tracker ----------------------------------------------
+  // Sets data-empty on any .field--prediction whose input has no value.
+  // CSS uses this to show / hide the red left-edge marker.
+  document.querySelectorAll('.field--prediction').forEach((field) => {
+    const radios = field.querySelectorAll('input[type="radio"]');
+    const input = field.querySelector('input:not([type="radio"]), select');
+
+    const isEmpty = () => {
+      if (radios.length > 0) return !Array.from(radios).some((r) => r.checked);
+      return !input || !input.value;
+    };
+    const update = () => {
+      if (isEmpty()) field.setAttribute('data-empty', '');
+      else field.removeAttribute('data-empty');
+    };
+
+    update();
+    if (input) {
+      input.addEventListener('input', update);
+      input.addEventListener('change', update);
+    }
+    radios.forEach((r) => r.addEventListener('change', update));
+  });
+})();
+</script>
 {% endblock %}
