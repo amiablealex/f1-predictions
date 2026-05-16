@@ -37,6 +37,7 @@
              pattern="[0-9:.]*"
              maxlength="8"
              autocomplete="off">
+      <small class="field__error" data-pole-error hidden></small>
     </div>
     {% for pos in [1, 2, 3] %}
       <div class="field field--inline field--prediction">
@@ -170,10 +171,15 @@
 // Pole time input mask + empty-state tracker for prediction fields.
 // Inline because both behaviours are scoped to this template only.
 (function () {
-  // ---- Pole time mask ---------------------------------------------------
+  // ---- Pole time mask + validation -------------------------------------
   // User types digits only; ':' and '.' are inserted automatically.
+  // On blur, value is normalised (missing ms padded with zeros) or flagged
+  // invalid. Submit is blocked while invalid.
   const pole = document.querySelector('input[name="pole_time"]');
   if (pole) {
+    const field = pole.closest('.field');
+    const errorEl = field.querySelector('[data-pole-error]');
+  
     const format = (digits) => {
       digits = digits.slice(0, 6);
       if (digits.length === 0) return '';
@@ -182,11 +188,68 @@
       if (digits.length >= 4) out += '.' + digits.slice(3, 6);
       return out;
     };
-    const apply = () => {
-      pole.value = format(pole.value.replace(/\D/g, ''));
+  
+    // Returns { valid: true, normalized } or { valid: false, message }.
+    const validate = (value) => {
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 0) return { valid: true, normalized: '' };
+      if (digits.length < 3) {
+        return { valid: false, message: 'Pole time needs at least M:SS (e.g. 1:23).' };
+      }
+      const seconds = digits.slice(1, 3);
+      if (parseInt(seconds, 10) > 59) {
+        return { valid: false, message: 'Seconds must be 00–59.' };
+      }
+      const ms = (digits.slice(3) + '000').slice(0, 3);
+      return { valid: true, normalized: `${digits[0]}:${seconds}.${ms}` };
     };
-    pole.addEventListener('input', apply);
-    if (pole.value) apply();  // normalise any server-rendered value
+  
+    const setError = (msg) => {
+      field.classList.add('field--error');
+      errorEl.textContent = msg;
+      errorEl.hidden = false;
+    };
+    const clearError = () => {
+      field.classList.remove('field--error');
+      errorEl.textContent = '';
+      errorEl.hidden = true;
+    };
+  
+    // Mask runs every keystroke; any stale error is cleared while editing.
+    pole.addEventListener('input', () => {
+      pole.value = format(pole.value.replace(/\D/g, ''));
+      clearError();
+    });
+  
+    // Validate + auto-pad ms when the user leaves the field.
+    pole.addEventListener('blur', () => {
+      const result = validate(pole.value);
+      if (!result.valid) {
+        setError(result.message);
+      } else {
+        clearError();
+        if (result.normalized !== pole.value) pole.value = result.normalized;
+      }
+    });
+  
+    // Belt-and-braces: re-validate at submit time in case they never blurred.
+    const form = pole.closest('form');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        const result = validate(pole.value);
+        if (!result.valid) {
+          e.preventDefault();
+          setError(result.message);
+          pole.focus();
+          pole.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (result.normalized !== pole.value) {
+          pole.value = result.normalized;
+        }
+      });
+    }
+  
+    // Normalise any server-rendered value on load.
+    if (pole.value) pole.value = format(pole.value.replace(/\D/g, ''));
   }
 
   // ---- Empty-state tracker ----------------------------------------------
