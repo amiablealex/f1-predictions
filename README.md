@@ -4,6 +4,8 @@ A small Flask app for a friend-group F1 predictions league. Predict the top 10, 
 
 **Live at [f1.kitsniff.com](https://f1.kitsniff.com)** · [About](https://f1.kitsniff.com/rules/about) · [Privacy](https://f1.kitsniff.com/rules/privacy) · [Changelog](./CHANGELOG.md)
 
+<img width="2000" height="676" alt="image" src="https://github.com/user-attachments/assets/e89e98c1-514f-44ae-b991-d0bde031f38b" />
+
 ## What it does
 
 - Predict each round before the deadline (1 hour before the first scoring session)
