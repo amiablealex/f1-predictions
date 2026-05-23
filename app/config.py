@@ -107,10 +107,10 @@ class Config:
     # Estimated session durations — used to transition status from
     # `in_progress` to `pending_results`.
     SESSION_DURATION_MINUTES = {
-        "sprint_quali": 60,
-        "sprint_race": 75,
-        "qualifying": 75,
-        "race": 150,
+        "sprint_quali": 50,
+        "sprint_race": 45,
+        "qualifying": 70,
+        "race": 130,
     }
 
     # -------------------------------------------------------------------------
