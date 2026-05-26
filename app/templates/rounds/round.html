@@ -6,6 +6,7 @@
 {% set drivers = state.drivers_by_id %}
 {% set scores = state.scores %}
 {% set actuals = state.actuals %}
+{% set special_actuals = state.special_actuals %}
 
 {% macro pred_driver_label(driver_id) %}
   {%- if driver_id and driver_id in drivers -%}
@@ -13,14 +14,31 @@
   {%- else -%}—{%- endif -%}
 {% endmacro %}
 
-{% macro actual_text(kind, pos) %}
-  {%- set key = (kind, pos) -%}
-  {%- if key in actuals -%}{{ actuals[key].text }}{%- endif -%}
+{% macro result_cell(entry) -%}
+  {%- if entry -%}
+    {%- if entry.is_exact -%}
+      <span class="pill pill--exact" aria-label="exact match">✓</span>
+    {%- else -%}
+      {{ entry.text -}}
+      {%- for line in entry.extra_lines %}<br>{{ line }}{% endfor -%}
+    {%- endif -%}
+    {%- if entry.substituted %}<span class="result-star">*</span>{% endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro phase_score_pill(points) %}
+  {% if points is not none %}
+    <span class="total-score-pill total-score-pill--phase">{{ points }}</span>
+  {% endif %}
 {% endmacro %}
 
 
 {% block content %}
 {{ round_header(rd, prev_round=prev_round, next_round=next_round, friend_username=friend_username) }}
+
+<div class="round-total">
+  <span class="total-score-pill total-score-pill--big">{{ state.total_points }}</span>
+</div>
 
 {% if not is_self %}
   <p class="muted small" style="text-align:center;">
@@ -43,20 +61,6 @@
   </div>
 {% endif %}
 
-<div class="row row--space" style="margin-bottom:1rem; align-items:center;">
-  <div class="muted small">
-    {% if state.is_locked %}
-      Locked
-    {% else %}
-      Locks {{ state.deadline|deadline_phrase }}
-    {% endif %}
-  </div>
-  <div class="row">
-    <span class="small muted">Total</span>
-    <span class="total-score-pill">{{ state.total_points }}</span>
-  </div>
-</div>
-
 {% if not state.is_locked and is_self %}
   <a href="{{ url_for('predictions.edit') }}" class="btn btn--primary btn--block" style="margin-bottom:1rem;">
     Edit predictions
@@ -70,15 +74,18 @@
   <div class="row row--space">
     <h3>Sprint Race</h3>
     {% set sr = sessions.get(SESSION_SPRINT_RACE) %}
-    <span class="{{ (sr.status if sr else None)|session_status_class }}">
-      {{ (sr.status if sr else None)|session_status_label }}
-    </span>
+    <div class="row">
+      <span class="{{ (sr.status if sr else None)|session_status_class }}">
+        {{ (sr.status if sr else None)|session_status_label }}
+      </span>
+      {{ phase_score_pill(state.sprint_points) }}
+    </div>
   </div>
   <div class="phase-grid">
     <div class="pred-row pred-row--head">
       <div class="pred-row__label"></div>
-      <div class="pred-row__predicted">Pick</div>
-      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__predicted"></div>
+      <div class="pred-row__actual">Result</div>
       <div class="pred-row__points">Pts</div>
     </div>
     {% for pos in [1, 2, 3] %}
@@ -87,7 +94,7 @@
         <div class="pred-row__predicted">
           {{ pred_driver_label(state.sprint_top3.get(pos).predicted_driver_id if state.sprint_top3.get(pos) else None) }}
         </div>
-        <div class="pred-row__actual small muted">{{ actual_text(PT_SPRINT_TOP3, pos) }}</div>
+        <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_SPRINT_TOP3, pos))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_SPRINT_TOP3, pos)].points if (PT_SPRINT_TOP3, pos) in scores else None, "sprint_top3") }}
         </div>
@@ -103,15 +110,18 @@
   <div class="row row--space">
     <h3>Qualifying</h3>
     {% set quali = sessions.get(SESSION_QUALI) %}
-    <span class="{{ (quali.status if quali else None)|session_status_class }}">
-      {{ (quali.status if quali else None)|session_status_label }}
-    </span>
+    <div class="row">
+      <span class="{{ (quali.status if quali else None)|session_status_class }}">
+        {{ (quali.status if quali else None)|session_status_label }}
+      </span>
+      {{ phase_score_pill(state.quali_points) }}
+    </div>
   </div>
   <div class="phase-grid">
     <div class="pred-row pred-row--head">
       <div class="pred-row__label"></div>
-      <div class="pred-row__predicted">Pick</div>
-      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__predicted"></div>
+      <div class="pred-row__actual">Result</div>
       <div class="pred-row__points">Pts</div>
     </div>
     <div class="pred-row">
@@ -132,7 +142,7 @@
         <div class="pred-row__predicted">
           {{ pred_driver_label(state.quali_top3.get(pos).predicted_driver_id if state.quali_top3.get(pos) else None) }}
         </div>
-        <div class="pred-row__actual small muted">{{ actual_text(PT_QUALI_TOP3, pos) }}</div>
+        <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_QUALI_TOP3, pos))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_QUALI_TOP3, pos)].points if (PT_QUALI_TOP3, pos) in scores else None, "quali_top3") }}
         </div>
@@ -146,9 +156,7 @@
         <div class="pred-row__predicted tabular">
           {{ 'P' ~ state.quali_random_driver.predicted_position if state.quali_random_driver else '—' }}
         </div>
-        <div class="pred-row__actual small muted tabular">
-          {{ actual_text(PT_QUALI_RANDOM_DRIVER, None) }}
-        </div>
+        <div class="pred-row__actual small muted tabular">{{ result_cell(actuals.get((PT_QUALI_RANDOM_DRIVER, None))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_QUALI_RANDOM_DRIVER, None)].points if (PT_QUALI_RANDOM_DRIVER, None) in scores else None, "quali_random_driver") }}
         </div>
@@ -167,11 +175,7 @@
             {{ drivers[state.qh2h.predicted_driver_id]|driver_label }}
           {%- else -%}—{%- endif -%}
         </div>
-        <div class="pred-row__actual small muted">
-          {%- if state.qh2h_winner_driver_id and state.qh2h_winner_driver_id in drivers -%}
-            {{ drivers[state.qh2h_winner_driver_id]|driver_label }}
-          {%- endif -%}
-        </div>
+        <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_QUALI_HEAD_TO_HEAD, None))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_QUALI_HEAD_TO_HEAD, None)].points if (PT_QUALI_HEAD_TO_HEAD, None) in scores else None, "quali_h2h") }}
         </div>
@@ -186,7 +190,7 @@
             {{ drivers[state.qnth.predicted_driver_id]|driver_label }}
           {%- else -%}—{%- endif -%}
         </div>
-        <div class="pred-row__actual small muted">{{ actual_text(PT_QUALI_NTH, None) }}</div>
+        <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_QUALI_NTH, None))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_QUALI_NTH, None)].points if (PT_QUALI_NTH, None) in scores else None, "quali_nth") }}
         </div>
@@ -201,15 +205,18 @@
   <div class="row row--space">
     <h3>Race</h3>
     {% set race = sessions.get(SESSION_RACE) %}
-    <span class="{{ (race.status if race else None)|session_status_class }}">
-      {{ (race.status if race else None)|session_status_label }}
-    </span>
+    <div class="row">
+      <span class="{{ (race.status if race else None)|session_status_class }}">
+        {{ (race.status if race else None)|session_status_label }}
+      </span>
+      {{ phase_score_pill(state.race_points) }}
+    </div>
   </div>
   <div class="phase-grid">
     <div class="pred-row pred-row--head">
       <div class="pred-row__label"></div>
-      <div class="pred-row__predicted">Pick</div>
-      <div class="pred-row__actual">Actual</div>
+      <div class="pred-row__predicted"></div>
+      <div class="pred-row__actual">Result</div>
       <div class="pred-row__points">Pts</div>
     </div>
     {% for pos in range(1, 11) %}
@@ -218,7 +225,7 @@
         <div class="pred-row__predicted">
           {{ pred_driver_label(state.top10.get(pos).predicted_driver_id if state.top10.get(pos) else None) }}
         </div>
-        <div class="pred-row__actual small muted">{{ actual_text(PT_RACE_TOP10, pos) }}</div>
+        <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_RACE_TOP10, pos))) }}</div>
         <div class="pred-row__points">
           {{ points_pill(scores[(PT_RACE_TOP10, pos)].points if (PT_RACE_TOP10, pos) in scores else None, "race_top10") }}
         </div>
@@ -229,9 +236,7 @@
       <div class="pred-row__predicted">
         {{ pred_driver_label(state.fastest_lap.predicted_driver_id if state.fastest_lap else None) }}
       </div>
-      <div class="pred-row__actual small muted">
-        {{ drivers[race.fastest_lap_driver_id]|driver_label if race and race.fastest_lap_driver_id else '' }}
-      </div>
+      <div class="pred-row__actual small muted">{{ result_cell(actuals.get((PT_FASTEST_LAP, None))) }}</div>
       <div class="pred-row__points">
         {{ points_pill(scores[(PT_FASTEST_LAP, None)].points if (PT_FASTEST_LAP, None) in scores else None, "fastest_lap") }}
       </div>
@@ -241,7 +246,7 @@
       <div class="pred-row__predicted">
         {{ pred_driver_label(state.places_gained.predicted_driver_id if state.places_gained else None) }}
       </div>
-      <div class="pred-row__actual small muted tabular">{{ actual_text(PT_PLACES_GAINED, None) }}</div>
+      <div class="pred-row__actual small muted tabular">{{ result_cell(actuals.get((PT_PLACES_GAINED, None))) }}</div>
       <div class="pred-row__points">
         {{ points_pill(scores[(PT_PLACES_GAINED, None)].points if (PT_PLACES_GAINED, None) in scores else None, "places_gained") }}
       </div>
@@ -251,9 +256,7 @@
       <div class="pred-row__predicted tabular">
         {{ state.dnf_count.predicted_count if state.dnf_count else '—' }}
       </div>
-      <div class="pred-row__actual small muted tabular">
-        {{ race.dnf_count if race and race.dnf_count is not none else '' }}
-      </div>
+      <div class="pred-row__actual small muted tabular">{{ result_cell(actuals.get((PT_DNF_COUNT, None))) }}</div>
       <div class="pred-row__points">
         {{ points_pill(scores[(PT_DNF_COUNT, None)].points if (PT_DNF_COUNT, None) in scores else None, "dnf_count") }}
       </div>
@@ -262,7 +265,6 @@
     {% for key in [rd.special_a_key, rd.special_b_key] if key %}
       {% set sp = SPECIALS_BY_KEY[key] if key in SPECIALS_BY_KEY else None %}
       {% set pred = state.specials.get(key) %}
-      {% set outcome = state.special_outcomes.get(key) %}
       {% if sp %}
         <div class="pred-row">
           <div class="pred-row__label small muted">{{ sp.label }}</div>
@@ -278,25 +280,7 @@
               {{ pred.predicted_team_name }}
             {%- else -%}—{%- endif -%}
           </div>
-          <div class="pred-row__actual small muted">
-            {%- if outcome is none or outcome.no_result -%}
-              {%- if outcome and outcome.no_result -%}no result{%- endif -%}
-            {%- elif sp.input_type == 'driver_pick' -%}
-              {%- set winner_ids = (outcome.actual_team_name.split(',') if outcome.actual_team_name else [outcome.actual_driver_id|string]) -%}
-              {%- for wid in winner_ids -%}
-                {%- set di = wid|int -%}
-                {%- if di in drivers -%}
-                  {{ drivers[di]|driver_label }}{% if not loop.last %}<br>{% endif %}
-                {%- endif -%}
-              {%- endfor -%}
-            {%- elif sp.input_type == 'int' -%}
-              {{ outcome.actual_int }}
-            {%- elif sp.input_type == 'bool' -%}
-              {{ 'Yes' if outcome.actual_bool else 'No' }}
-            {%- elif sp.input_type == 'team_pick' -%}
-              {{ outcome.actual_team_name }}
-            {%- endif -%}
-          </div>
+          <div class="pred-row__actual small muted">{{ result_cell(special_actuals.get(key)) }}</div>
           <div class="pred-row__points">
             {{ points_pill(state.special_scores[key].points if key in state.special_scores else None, "special") }}
           </div>

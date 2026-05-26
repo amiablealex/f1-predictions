@@ -751,3 +751,39 @@ p { margin: 0 0 var(--space-3) 0; }
   letter-spacing: 0.05em;
   font-weight: 600;
 }
+
+/* ---- Round view: big centered total ---- */
+.round-total {
+  display: flex;
+  justify-content: center;
+  margin: 0.25rem 0 1.25rem;
+}
+.total-score-pill--big {
+  font-size: 2.25rem;
+  padding: 0.4rem 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* ---- Phase-section score pill (sits next to status label) ---- */
+.total-score-pill--phase {
+  font-size: 0.95rem;
+  padding: 0.1rem 0.55rem;
+}
+
+/* ---- Exact-match tick pill (Result column) ---- */
+.pill--exact {
+  background-color: var(--c-points-10);   /* matches palette.points_10 */
+  color: var(--c-surface);               /* matches palette.surface */
+  font-weight: 700;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* ---- Substitution star next to a result ---- */
+.result-star {
+  margin-left: 0.15rem;
+  color: #6f6a5e;
+  font-weight: 700;
+}

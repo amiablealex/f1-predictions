@@ -35,10 +35,14 @@ from app.models.prediction import (
 from app.models.special import SpecialOutcome
 from app.round_display import (
     ActualDisplay,
+    actual_for_dnf_count,
+    actual_for_fastest_lap,
+    actual_for_h2h,
+    actual_for_special,
     actual_places_gained_for_pick,
     actual_position_for_pick,
-    qh2h_winner_driver_id,
 )
+from app.specials import SPECIALS_BY_KEY
 from app.models.round import (
     Round,
     RoundState,
@@ -208,28 +212,33 @@ def round_driver_choices(round_obj: Round) -> list[DriverChoice]:
     return out
 
 
-# =============================================================================
-# Top mover — display helper for the round-detail "places gained" row
-# =============================================================================
-
 def _build_actuals(
     rd: Round,
     sessions: dict[SessionType, Session],
     round_drivers: list[RoundDriver],
+    drivers_by_id: dict[int, Driver],
     top10: dict[int, Top10Prediction],
     quali_top3: dict[int, Top3QualiPrediction],
     sprint_top3: dict[int, Top3SprintPrediction],
     qnth: QualiNthPrediction | None,
+    qh2h: QualiHeadToHeadPrediction | None,
+    fastest_lap: FastestLapPrediction | None,
+    dnf_count_pred: DnfCountPrediction | None,
     places_gained: PlacesGainedPrediction | None,
     quali_random_driver: QualiRandomDriverPrediction | None,
-) -> tuple[dict[tuple[PredictionType, int | None], ActualDisplay], bool]:
-    """Pre-compute the 'actual outcome' string for every pick that needs one.
+    specials: dict[str, SpecialPrediction],
+    special_outcomes: dict[str, SpecialOutcome],
+) -> tuple[
+    dict[tuple[PredictionType, int | None], ActualDisplay],
+    dict[str, ActualDisplay],
+    bool,
+]:
+    """Pre-compute every 'actual outcome' cell.
 
-    Returns (actuals_dict, any_substitution_flag). The dict only contains
-    keys for picks where an actual can be displayed — missing picks and
-    sessions-without-results are simply absent.
+    Returns (actuals, special_actuals, any_substitution_flag).
     """
     actuals: dict[tuple[PredictionType, int | None], ActualDisplay] = {}
+    special_actuals: dict[str, ActualDisplay] = {}
     any_sub = False
 
     race = sessions.get(SessionType.RACE)
@@ -247,23 +256,47 @@ def _build_actuals(
     for pos, pred in top10.items():
         _add(
             (PredictionType.RACE_TOP10, pos),
-            actual_position_for_pick(pred.predicted_driver_id, race, round_drivers),
+            actual_position_for_pick(
+                pred.predicted_driver_id, pos, race, round_drivers,
+            ),
         )
     for pos, pred in quali_top3.items():
         _add(
             (PredictionType.QUALI_TOP3, pos),
-            actual_position_for_pick(pred.predicted_driver_id, quali, round_drivers),
+            actual_position_for_pick(
+                pred.predicted_driver_id, pos, quali, round_drivers,
+            ),
         )
     for pos, pred in sprint_top3.items():
         _add(
             (PredictionType.SPRINT_TOP3, pos),
-            actual_position_for_pick(pred.predicted_driver_id, sprint, round_drivers),
+            actual_position_for_pick(
+                pred.predicted_driver_id, pos, sprint, round_drivers,
+            ),
         )
-    if qnth is not None:
+
+    if qnth is not None and rd.quali_nth_position is not None:
         _add(
             (PredictionType.QUALI_NTH, None),
-            actual_position_for_pick(qnth.predicted_driver_id, quali, round_drivers),
+            actual_position_for_pick(
+                qnth.predicted_driver_id,
+                rd.quali_nth_position,
+                quali,
+                round_drivers,
+            ),
         )
+
+    if quali_random_driver is not None and rd.random_quali_driver is not None:
+        _add(
+            (PredictionType.QUALI_RANDOM_DRIVER, None),
+            actual_position_for_pick(
+                rd.random_quali_driver.expected_driver_id,
+                quali_random_driver.predicted_position,
+                quali,
+                round_drivers,
+            ),
+        )
+
     if places_gained is not None:
         _add(
             (PredictionType.PLACES_GAINED, None),
@@ -271,19 +304,50 @@ def _build_actuals(
                 places_gained.predicted_driver_id, race, round_drivers,
             ),
         )
-    if quali_random_driver is not None and rd.random_quali_driver is not None:
-        # The user predicted a position for the round's random driver;
-        # the actual is that driver's car's qualifying outcome.
-        _add(
-            (PredictionType.QUALI_RANDOM_DRIVER, None),
-            actual_position_for_pick(
-                rd.random_quali_driver.expected_driver_id,
-                quali,
-                round_drivers,
-            ),
-        )
 
-    return actuals, any_sub
+    # H2H — populate regardless of whether the user submitted a pick,
+    # so the cell renders the winner once quali completes.
+    _add(
+        (PredictionType.QUALI_HEAD_TO_HEAD, None),
+        actual_for_h2h(
+            qh2h.predicted_driver_id if qh2h is not None else None,
+            rd.qh2h_driver_a, rd.qh2h_driver_b,
+            quali, drivers_by_id,
+        ),
+    )
+
+    # Fastest lap — same: render the actual setter regardless.
+    _add(
+        (PredictionType.FASTEST_LAP, None),
+        actual_for_fastest_lap(
+            fastest_lap.predicted_driver_id if fastest_lap is not None else None,
+            race, round_drivers, drivers_by_id,
+        ),
+    )
+
+    # DNF count — render the actual once we have it.
+    _add(
+        (PredictionType.DNF_COUNT, None),
+        actual_for_dnf_count(
+            dnf_count_pred.predicted_count if dnf_count_pred is not None else None,
+            race.dnf_count if race is not None else None,
+        ),
+    )
+
+    # Specials — one entry per active special on the round.
+    for key in (rd.special_a_key, rd.special_b_key):
+        if not key:
+            continue
+        sp = SPECIALS_BY_KEY.get(key)
+        if sp is None:
+            continue
+        ad = actual_for_special(
+            sp, specials.get(key), special_outcomes.get(key), drivers_by_id,
+        )
+        if ad is not None:
+            special_actuals[key] = ad
+
+    return actuals, special_actuals, any_sub
 
 
 def load_round_state(round_id: int, user_id: int) -> RoundUserState:
@@ -346,22 +410,45 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
     total_points = sum(s.points for s in score_rows)
 
     round_drivers_list = list(rd.round_drivers)
-    actuals, any_sub = _build_actuals(
-        rd, sessions, round_drivers_list,
+    drivers_by_id = _drivers_lookup(rd)
+    actuals, special_actuals, any_sub = _build_actuals(
+        rd, sessions, round_drivers_list, drivers_by_id,
         top10, quali_top3, sprint_top3,
-        qnth, places_gained, quali_random_driver,
+        qnth, qh2h, fastest_lap, dnf_count,
+        places_gained, quali_random_driver,
+        specials, special_outcomes,
     )
-    qh2h_winner = qh2h_winner_driver_id(
-        rd.qh2h_driver_a, rd.qh2h_driver_b,
-        sessions.get(SessionType.QUALIFYING),
-    )
+
+    # Per-phase point sums. None when no rows for that phase exist yet
+    # (phase not scored); 0 when scored to 0 points.
+    _sprint_kinds = {PredictionType.SPRINT_TOP3}
+    _quali_kinds = {
+        PredictionType.QUALI_TOP3, PredictionType.POLE_TIME,
+        PredictionType.QUALI_RANDOM_DRIVER, PredictionType.QUALI_HEAD_TO_HEAD,
+        PredictionType.QUALI_NTH,
+    }
+    _race_kinds = {
+        PredictionType.RACE_TOP10, PredictionType.FASTEST_LAP,
+        PredictionType.DNF_COUNT, PredictionType.PLACES_GAINED,
+        PredictionType.SPECIAL,
+    }
+    sprint_points: int | None = None
+    quali_points: int | None = None
+    race_points: int | None = None
+    for row in score_rows:
+        if row.kind in _sprint_kinds:
+            sprint_points = (sprint_points or 0) + row.points
+        elif row.kind in _quali_kinds:
+            quali_points = (quali_points or 0) + row.points
+        elif row.kind in _race_kinds:
+            race_points = (race_points or 0) + row.points
 
     return RoundUserState(
         round_obj=rd,
         is_locked=rd.predictions_locked,
         deadline=rd.predictions_deadline,
         sessions=sessions,
-        drivers_by_id=_drivers_lookup(rd),
+        drivers_by_id=drivers_by_id,
         round_drivers=round_drivers_list,
         top10=top10, quali_top3=quali_top3, sprint_top3=sprint_top3,
         pole_time=pole_time,
@@ -372,11 +459,15 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         specials=specials,
         special_outcomes=special_outcomes,
         actuals=actuals,
-        qh2h_winner_driver_id=qh2h_winner,
+        special_actuals=special_actuals,
         any_substitution=any_sub,
+        sprint_points=sprint_points,
+        quali_points=quali_points,
+        race_points=race_points,
         scores=scores, special_scores=special_scores,
         total_points=total_points,
     )
+
 
 # =============================================================================
 # Loading a user's predictions and scores for a round
@@ -405,17 +496,21 @@ class RoundUserState:
     qnth: "QualiNthPrediction | None"
     specials: dict[str, "SpecialPrediction"]
     special_outcomes: dict[str, "SpecialOutcome"]
-    # Pre-computed "actual outcome" cells for the picks that need them.
+    # Pre-computed "actual outcome" cells for non-special prediction kinds.
     # Keyed by (kind, position-or-None) — same shape as `scores`. Entries
-    # are absent for picks the user didn't make, or when results aren't
-    # in yet; the template renders an empty cell in that case.
+    # are absent when results aren't in yet; the template renders an
+    # empty cell in that case.
     actuals: dict[tuple[PredictionType, int | None], ActualDisplay]
-    # Quali H2H "actual" is a driver, not a position string — keep it
-    # separate so the template can label it via drivers_by_id.
-    qh2h_winner_driver_id: int | None
+    # Specials get their own dict, keyed by special_key.
+    special_actuals: dict[str, ActualDisplay]
     # True iff any computed actual involved a substitute driver — drives
     # the footnote at the bottom of the round page.
     any_substitution: bool
+    # Per-phase point sums. None when the phase hasn't been scored yet
+    # (no rows for that phase exist); 0 when scored but no points earned.
+    sprint_points: int | None
+    quali_points: int | None
+    race_points: int | None
     # Scores indexed by (kind, position-or-None) for non-special rows.
     scores: dict[tuple[PredictionType, int | None], PredictionScore]
     # Score rows for specials, keyed by special_key.
