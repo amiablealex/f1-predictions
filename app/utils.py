@@ -33,7 +33,12 @@ from app.models.prediction import (
     Top10Prediction,
 )
 from app.models.special import SpecialOutcome
-from app.models.result import SessionResult
+from app.round_display import (
+    ActualDisplay,
+    actual_places_gained_for_pick,
+    actual_position_for_pick,
+    qh2h_winner_driver_id,
+)
 from app.models.round import (
     Round,
     RoundState,
@@ -207,95 +212,78 @@ def round_driver_choices(round_obj: Round) -> list[DriverChoice]:
 # Top mover — display helper for the round-detail "places gained" row
 # =============================================================================
 
+def _build_actuals(
+    rd: Round,
+    sessions: dict[SessionType, Session],
+    round_drivers: list[RoundDriver],
+    top10: dict[int, Top10Prediction],
+    quali_top3: dict[int, Top3QualiPrediction],
+    sprint_top3: dict[int, Top3SprintPrediction],
+    qnth: QualiNthPrediction | None,
+    places_gained: PlacesGainedPrediction | None,
+    quali_random_driver: QualiRandomDriverPrediction | None,
+) -> tuple[dict[tuple[PredictionType, int | None], ActualDisplay], bool]:
+    """Pre-compute the 'actual outcome' string for every pick that needs one.
 
-def compute_top_mover(round_obj: Round) -> tuple[Driver | None, int | None]:
-    """Find the driver who gained the most places in this round's race.
-
-    Returns (driver, places). Places can be negative if the field's biggest
-    mover went backwards. Returns (None, None) if no race results or no
-    grid data is available.
-
-    Tie-break: better finish position wins the display slot.
+    Returns (actuals_dict, any_substitution_flag). The dict only contains
+    keys for picks where an actual can be displayed — missing picks and
+    sessions-without-results are simply absent.
     """
-    race = next(
-        (s for s in round_obj.sessions if s.session_type == SessionType.RACE),
-        None,
-    )
-    if race is None or not race.results:
-        return (None, None)
-    classified = [
-        r for r in race.results
-        if r.is_classified and r.grid_position is not None
-    ]
-    if not classified:
-        return (None, None)
-    total = len(race.results)
-    best_result: SessionResult | None = None
-    best_gained: int | None = None
-    for r in classified:
-        grid = r.grid_position if r.grid_position != 0 else total
-        gained = grid - r.position
-        if (
-            best_gained is None
-            or gained > best_gained
-            or (gained == best_gained and best_result is not None and r.position < best_result.position)
-        ):
-            best_gained = gained
-            best_result = r
-    if best_result is None:
-        return (None, None)
-    driver = db.session.get(Driver, best_result.actual_driver_id)
-    return (driver, best_gained)
+    actuals: dict[tuple[PredictionType, int | None], ActualDisplay] = {}
+    any_sub = False
 
+    race = sessions.get(SessionType.RACE)
+    quali = sessions.get(SessionType.QUALIFYING)
+    sprint = sessions.get(SessionType.SPRINT_RACE)
 
-# =============================================================================
-# Loading a user's predictions and scores for a round
-# =============================================================================
+    def _add(key, ad):
+        nonlocal any_sub
+        if ad is None:
+            return
+        actuals[key] = ad
+        if ad.substituted:
+            any_sub = True
 
+    for pos, pred in top10.items():
+        _add(
+            (PredictionType.RACE_TOP10, pos),
+            actual_position_for_pick(pred.predicted_driver_id, race, round_drivers),
+        )
+    for pos, pred in quali_top3.items():
+        _add(
+            (PredictionType.QUALI_TOP3, pos),
+            actual_position_for_pick(pred.predicted_driver_id, quali, round_drivers),
+        )
+    for pos, pred in sprint_top3.items():
+        _add(
+            (PredictionType.SPRINT_TOP3, pos),
+            actual_position_for_pick(pred.predicted_driver_id, sprint, round_drivers),
+        )
+    if qnth is not None:
+        _add(
+            (PredictionType.QUALI_NTH, None),
+            actual_position_for_pick(qnth.predicted_driver_id, quali, round_drivers),
+        )
+    if places_gained is not None:
+        _add(
+            (PredictionType.PLACES_GAINED, None),
+            actual_places_gained_for_pick(
+                places_gained.predicted_driver_id, race, round_drivers,
+            ),
+        )
+    if quali_random_driver is not None and rd.random_quali_driver is not None:
+        # The user predicted a position for the round's random driver;
+        # the actual is that driver's car's qualifying outcome.
+        _add(
+            (PredictionType.QUALI_RANDOM_DRIVER, None),
+            actual_position_for_pick(
+                rd.random_quali_driver.expected_driver_id,
+                quali,
+                round_drivers,
+            ),
+        )
 
-@dataclass
-class RoundUserState:
-    """Everything the round-view template needs for one user's perspective."""
-    round_obj: Round
-    is_locked: bool
-    deadline: datetime | None
-    sessions: dict[SessionType, Session]
-    drivers_by_id: dict[int, Driver]                 # for label rendering
-    round_drivers: list[RoundDriver]
-    # Predictions (any may be empty/None)
-    top10: dict[int, Top10Prediction]
-    quali_top3: dict[int, Top3QualiPrediction]
-    sprint_top3: dict[int, Top3SprintPrediction]
-    pole_time: PoleTimePrediction | None
-    fastest_lap: FastestLapPrediction | None
-    dnf_count: DnfCountPrediction | None
-    places_gained: PlacesGainedPrediction | None
-    quali_random_driver: QualiRandomDriverPrediction | None
-    qh2h: "QualiHeadToHeadPrediction | None"
-    qnth: "QualiNthPrediction | None"
-    specials: dict[str, "SpecialPrediction"]
-    special_outcomes: dict[str, "SpecialOutcome"]
-    # Display helpers (populated for the round-detail view)
-    top_mover_driver: Driver | None
-    top_mover_places: int | None
-    # Scores indexed by (kind, position-or-None) for non-special rows.
-    scores: dict[tuple[PredictionType, int | None], PredictionScore]
-    # Score rows for specials, keyed by special_key.
-    special_scores: dict[str, PredictionScore]
-    total_points: int
-
-
-def _drivers_lookup(round_obj: Round) -> dict[int, Driver]:
-    """Map driver_id → Driver for everyone who's ever been the regular for a
-    car in this round, plus the actual drivers in any session results."""
-    ids: set[int] = {rd.expected_driver_id for rd in round_obj.round_drivers}
-    for s in round_obj.sessions:
-        for r in s.results:
-            ids.add(r.actual_driver_id)
-    if not ids:
-        return {}
-    rows = db.session.query(Driver).filter(Driver.id.in_(ids)).all()
-    return {d.id: d for d in rows}
+    return actuals, any_sub
 
 
 def load_round_state(round_id: int, user_id: int) -> RoundUserState:
@@ -357,7 +345,16 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
     }
     total_points = sum(s.points for s in score_rows)
 
-    top_mover_driver, top_mover_places = compute_top_mover(rd)
+    round_drivers_list = list(rd.round_drivers)
+    actuals, any_sub = _build_actuals(
+        rd, sessions, round_drivers_list,
+        top10, quali_top3, sprint_top3,
+        qnth, places_gained, quali_random_driver,
+    )
+    qh2h_winner = qh2h_winner_driver_id(
+        rd.qh2h_driver_a, rd.qh2h_driver_b,
+        sessions.get(SessionType.QUALIFYING),
+    )
 
     return RoundUserState(
         round_obj=rd,
@@ -365,7 +362,7 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         deadline=rd.predictions_deadline,
         sessions=sessions,
         drivers_by_id=_drivers_lookup(rd),
-        round_drivers=list(rd.round_drivers),
+        round_drivers=round_drivers_list,
         top10=top10, quali_top3=quali_top3, sprint_top3=sprint_top3,
         pole_time=pole_time,
         fastest_lap=fastest_lap, dnf_count=dnf_count,
@@ -374,11 +371,69 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         qh2h=qh2h, qnth=qnth,
         specials=specials,
         special_outcomes=special_outcomes,
-        top_mover_driver=top_mover_driver,
-        top_mover_places=top_mover_places,
+        actuals=actuals,
+        qh2h_winner_driver_id=qh2h_winner,
+        any_substitution=any_sub,
         scores=scores, special_scores=special_scores,
         total_points=total_points,
     )
+
+# =============================================================================
+# Loading a user's predictions and scores for a round
+# =============================================================================
+
+
+@dataclass
+class RoundUserState:
+    """Everything the round-view template needs for one user's perspective."""
+    round_obj: Round
+    is_locked: bool
+    deadline: datetime | None
+    sessions: dict[SessionType, Session]
+    drivers_by_id: dict[int, Driver]                 # for label rendering
+    round_drivers: list[RoundDriver]
+    # Predictions (any may be empty/None)
+    top10: dict[int, Top10Prediction]
+    quali_top3: dict[int, Top3QualiPrediction]
+    sprint_top3: dict[int, Top3SprintPrediction]
+    pole_time: PoleTimePrediction | None
+    fastest_lap: FastestLapPrediction | None
+    dnf_count: DnfCountPrediction | None
+    places_gained: PlacesGainedPrediction | None
+    quali_random_driver: QualiRandomDriverPrediction | None
+    qh2h: "QualiHeadToHeadPrediction | None"
+    qnth: "QualiNthPrediction | None"
+    specials: dict[str, "SpecialPrediction"]
+    special_outcomes: dict[str, "SpecialOutcome"]
+    # Pre-computed "actual outcome" cells for the picks that need them.
+    # Keyed by (kind, position-or-None) — same shape as `scores`. Entries
+    # are absent for picks the user didn't make, or when results aren't
+    # in yet; the template renders an empty cell in that case.
+    actuals: dict[tuple[PredictionType, int | None], ActualDisplay]
+    # Quali H2H "actual" is a driver, not a position string — keep it
+    # separate so the template can label it via drivers_by_id.
+    qh2h_winner_driver_id: int | None
+    # True iff any computed actual involved a substitute driver — drives
+    # the footnote at the bottom of the round page.
+    any_substitution: bool
+    # Scores indexed by (kind, position-or-None) for non-special rows.
+    scores: dict[tuple[PredictionType, int | None], PredictionScore]
+    # Score rows for specials, keyed by special_key.
+    special_scores: dict[str, PredictionScore]
+    total_points: int
+
+
+def _drivers_lookup(round_obj: Round) -> dict[int, Driver]:
+    """Map driver_id → Driver for everyone who's ever been the regular for a
+    car in this round, plus the actual drivers in any session results."""
+    ids: set[int] = {rd.expected_driver_id for rd in round_obj.round_drivers}
+    for s in round_obj.sessions:
+        for r in s.results:
+            ids.add(r.actual_driver_id)
+    if not ids:
+        return {}
+    rows = db.session.query(Driver).filter(Driver.id.in_(ids)).all()
+    return {d.id: d for d in rows}
 
 
 # =============================================================================
