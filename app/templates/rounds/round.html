@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import round_header, points_pill %}
+{% from "_macros.html" import round_header, points_pill, friend_view_strip %}
 
 {% set rd = state.round_obj %}
 {% set sessions = state.sessions %}
@@ -34,18 +34,16 @@
 
 
 {% block content %}
+
+{% if not is_self %}
+  {{ friend_view_strip(viewed_user, url_for('rounds.view', season=rd.season, round_number=rd.round_number)) }}
+{% endif %}
+
 {{ round_header(rd, prev_round=prev_round, next_round=next_round, friend_username=friend_username) }}
 
 <div class="round-total">
   <span class="total-score-pill total-score-pill--big">{{ state.total_points }}</span>
 </div>
-
-{% if not is_self %}
-  <p class="muted small" style="text-align:center;">
-    Viewing <strong>{{ viewed_user.username }}</strong>'s round
-    · <a href="{{ url_for('rounds.view', season=rd.season, round_number=rd.round_number) }}">your view</a>
-  </p>
-{% endif %}
 
 {# Status banner: live during a session, pending while we wait on results #}
 {% set in_progress = sessions.values() | selectattr('status.value', 'equalto', 'in_progress') | list %}

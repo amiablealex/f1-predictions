@@ -395,6 +395,35 @@ p { margin: 0 0 var(--space-3) 0; }
 .pill--status-pending     { background: rgba(138, 125, 82, 0.16); color: var(--c-status-pending); }
 .pill--status-completed   { background: rgba(79, 107, 58, 0.13);  color: var(--c-status-completed); }
 
+/* ---- Friend-view context strip ---- */
+.friend-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--c-surface-alt);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.875rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--c-ink);
+}
+.friend-strip__name {
+  font-weight: 600;
+}
+.friend-strip__back {
+  color: var(--c-ink-muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.friend-strip__back:hover,
+.friend-strip__back:focus {
+  color: var(--c-ink);
+  text-decoration: underline;
+}
+
 /* ----------------------------------------------------------------- Misc */
 
 .divider {

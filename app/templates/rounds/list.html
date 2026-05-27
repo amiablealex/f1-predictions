@@ -1,13 +1,12 @@
 {% extends "base.html" %}
-{% block content %}
-<h1>{{ season }} season</h1>
+{% from "_macros.html" import friend_view_strip %}
 
+{% block content %}
 {% if not is_self %}
-  <p class="muted small" style="text-align:center;">
-    Viewing <strong>{{ viewed_user.username }}</strong>'s rounds
-    · <a href="{{ url_for('rounds.list') }}">your view</a>
-  </p>
+  {{ friend_view_strip(viewed_user, url_for('rounds.list'), context="season") }}
 {% endif %}
+
+<h1>{{ season }} season</h1>
 
 <section class="card">
   {% if not rows %}

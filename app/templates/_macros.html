@@ -1,4 +1,4 @@
-w{# Reusable macros shared across views. #}
+{# Reusable macros shared across views. #}
 
 {% macro round_header(round_obj, prev_round=None, next_round=None, friend_username=None) %}
   {% if friend_username %}
@@ -75,5 +75,15 @@ w{# Reusable macros shared across views. #}
     <div class="pred-row__predicted">{{ predicted or '—' }}</div>
     <div class="pred-row__actual small muted">{{ actual or '' }}</div>
     <div class="pred-row__points">{{ points_pill(points) }}</div>
+  </div>
+{% endmacro %}
+
+
+{% macro friend_view_strip(viewed_user, return_url, context="round") %}
+  <div class="friend-strip" role="note">
+    <span class="friend-strip__label">
+      Viewing <span class="friend-strip__name">{{ viewed_user.username }}</span>'s {{ context }}
+    </span>
+    <a href="{{ return_url }}" class="friend-strip__back">Your view</a>
   </div>
 {% endmacro %}
