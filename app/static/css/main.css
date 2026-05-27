@@ -697,7 +697,7 @@ p { margin: 0 0 var(--space-3) 0; }
   font-size: 1.1rem;
   font-weight: 500;
   line-height: 1;
-  background: var(--c-surface-alt);
+  background: transparent;
   color: var(--c-ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
