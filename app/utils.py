@@ -85,6 +85,24 @@ def get_current_round(season: int) -> Round | None:
     return most_recent
 
 
+def get_active_round(season: int) -> Round | None:
+    """The currently 'active' round: predictions locked, not yet completed.
+
+    Used by the landing page to send users to where the action is, and
+    by the predictions form to surface a banner pointing back here.
+    """
+    return (
+        db.session.query(Round)
+        .filter(
+            Round.season == season,
+            Round.predictions_locked.is_(True),
+            Round.state != RoundState.COMPLETED,
+        )
+        .order_by(Round.round_number.desc())
+        .first()
+    )
+
+
 def get_round_by_number(season: int, round_number: int) -> Round | None:
     return (
         db.session.query(Round)

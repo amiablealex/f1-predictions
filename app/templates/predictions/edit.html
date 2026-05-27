@@ -4,6 +4,14 @@
 {% block content %}
 {{ round_header(round_obj) }}
 
+{% if active_round %}
+  <div class="status-banner status-banner--live" style="margin-bottom:1rem;">
+    <span class="status-banner__dot"></span>
+    Round {{ active_round.round_number }} is live —
+    <a href="{{ url_for('rounds.view', season=active_round.season, round_number=active_round.round_number) }}">see your results</a>
+  </div>
+{% endif %}
+
 <p class="muted small">
   Locks <strong>{{ round_obj.predictions_deadline|deadline_phrase }}</strong>
   <span data-countdown="{{ round_obj.predictions_deadline.isoformat() }}"

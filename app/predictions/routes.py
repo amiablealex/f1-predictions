@@ -30,6 +30,7 @@ from app.models.prediction import (
 from app.specials import SPECIALS_BY_KEY
 from app.models.round import Round, WeekendType
 from app.utils import (
+    get_active_round,
     get_current_round,
     get_round_by_number,
     round_driver_choices,
@@ -48,6 +49,12 @@ def _utcnow():
 def _resolve_active_round() -> Round | None:
     from flask import current_app
     return get_current_round(current_app.config["F1_SEASON"])
+
+
+def _displayed_active_round() -> Round | None:
+    """Locked-but-not-completed round, for the cross-banner on the form."""
+    from flask import current_app
+    return get_active_round(current_app.config["F1_SEASON"])
 
 
 @predictions_bp.route("/predictions", methods=["GET"])
@@ -97,6 +104,7 @@ def edit():
         ],
         form=form,
         title="Predictions",
+        active_round=_displayed_active_round(),
     )
 
 
@@ -153,6 +161,7 @@ def submit():
             ],
             form=form,
             title="Predictions",
+            active_round=_displayed_active_round(),
         )
 
     _save_predictions(rd.id, current_user.id, payload, is_sprint)

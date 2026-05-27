@@ -99,10 +99,18 @@ def _register_blueprints(app: Flask) -> None:
     def index():
         if not current_user.is_authenticated:
             return redirect(url_for("auth.login"))
-        # Authenticated landing → predictions if there's an open round,
-        # otherwise the round view (which handles 'no rounds yet').
         from datetime import datetime, timezone
-        from app.utils import get_current_round
+        from app.utils import get_active_round, get_current_round
+
+        # Priority: an active round (deadline passed, results unfolding) —
+        # that's where the user's attention is.
+        active = get_active_round(app.config["F1_SEASON"])
+        if active is not None:
+            return redirect(url_for(
+                "rounds.view",
+                season=active.season, round_number=active.round_number,
+            ))
+
         rd = get_current_round(app.config["F1_SEASON"])
         if rd is None:
             return redirect(url_for("rounds.current"))
