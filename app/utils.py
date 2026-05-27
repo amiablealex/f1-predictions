@@ -12,6 +12,7 @@ from functools import wraps
 from flask import abort
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 from app.api.jolpica import format_lap_time
 from app.extensions import db
@@ -461,6 +462,8 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         elif row.kind in _race_kinds:
             race_points = (race_points or 0) + row.points
 
+    avg, highest = round_average_and_highest(round_id)
+
     return RoundUserState(
         round_obj=rd,
         is_locked=rd.predictions_locked,
@@ -484,7 +487,30 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         race_points=race_points,
         scores=scores, special_scores=special_scores,
         total_points=total_points,
+        average_total_points=avg,
+        highest_total_points=highest,
     )
+
+
+def round_average_and_highest(round_id: int) -> tuple[int | None, int | None]:
+    """Mean and max PredictionScore totals for this round, computed
+    across users who actually scored (sum > 0). Returns (None, None)
+    when nobody qualifies. One query, two reference points used by the
+    round-view header trio.
+    """
+    user_totals = (
+        db.session.query(
+            PredictionScore.user_id,
+            func.coalesce(func.sum(PredictionScore.points), 0),
+        )
+        .filter(PredictionScore.round_id == round_id)
+        .group_by(PredictionScore.user_id)
+        .all()
+    )
+    scores = [int(total) for _, total in user_totals if int(total) > 0]
+    if not scores:
+        return (None, None)
+    return (round(sum(scores) / len(scores)), max(scores))
 
 
 # =============================================================================
@@ -534,6 +560,10 @@ class RoundUserState:
     # Score rows for specials, keyed by special_key.
     special_scores: dict[str, PredictionScore]
     total_points: int
+    # Reference points from across the app for the round-view header trio.
+    # Both None when nobody has any score for this round yet.
+    average_total_points: int | None
+    highest_total_points: int | None
 
 
 def _drivers_lookup(round_obj: Round) -> dict[int, Driver]:

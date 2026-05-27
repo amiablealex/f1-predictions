@@ -42,7 +42,22 @@
 {{ round_header(rd, prev_round=prev_round, next_round=next_round, friend_username=friend_username) }}
 
 <div class="round-total">
-  <span class="total-score-pill total-score-pill--big">{{ state.total_points }}</span>
+  {% if state.average_total_points is not none %}
+    <div class="round-total__item round-total__item--secondary">
+      <span class="total-score-pill total-score-pill--medium">{{ state.average_total_points }}</span>
+      <span class="round-total__label">Global avg</span>
+    </div>
+  {% endif %}
+  <div class="round-total__item round-total__item--primary">
+    <span class="total-score-pill total-score-pill--big total-score-pill--primary">{{ state.total_points }}</span>
+    <span class="round-total__label">Total pts</span>
+  </div>
+  {% if state.highest_total_points is not none %}
+    <div class="round-total__item round-total__item--tertiary">
+      <span class="total-score-pill total-score-pill--medium">{{ state.highest_total_points }}</span>
+      <span class="round-total__label">Highest</span>
+    </div>
+  {% endif %}
 </div>
 
 {# Status banner: live during a session, pending while we wait on results #}
