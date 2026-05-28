@@ -857,3 +857,18 @@ p { margin: 0 0 var(--space-3) 0; }
   color: #6f6a5e;
   font-weight: 700;
 }
+
+/* ---- Example round styling for new users ---- */
+
+.example-round {
+  margin-top: 2rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.6;
+  -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+}
+.example-round__caption {
+  text-align: center;
+  letter-spacing: 0.1em;
+  margin-bottom: var(--space-2);
+}

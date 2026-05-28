@@ -87,3 +87,36 @@
     <a href="{{ return_url }}" class="friend-strip__back">Your view</a>
   </div>
 {% endmacro %}
+
+{% macro example_round_snippet() %}
+  <div class="example-round" aria-label="Example round">
+    <div class="phase-grid">
+      <div class="pred-row pred-row--head">
+        <div class="pred-row__label"></div>
+        <div class="pred-row__predicted">Your pick</div>
+        <div class="pred-row__actual">Result</div>
+        <div class="pred-row__points">Pts</div>
+      </div>
+      <div class="pred-row">
+        <div class="pred-row__label small muted">P1</div>
+        <div class="pred-row__predicted">Verstappen</div>
+        <div class="pred-row__actual small muted">
+          <span class="pill pill--exact" aria-label="exact match">✓</span>
+        </div>
+        <div class="pred-row__points"><span class="pill pill--p10">+10</span></div>
+      </div>
+      <div class="pred-row">
+        <div class="pred-row__label small muted">P2</div>
+        <div class="pred-row__predicted">Piastri</div>
+        <div class="pred-row__actual small muted tabular">P3</div>
+        <div class="pred-row__points"><span class="pill pill--p5">+5</span></div>
+      </div>
+      <div class="pred-row">
+        <div class="pred-row__label small muted">P3</div>
+        <div class="pred-row__predicted">Leclerc</div>
+        <div class="pred-row__actual small muted tabular">P6</div>
+        <div class="pred-row__points"><span class="pill pill--p0">0</span></div>
+      </div>
+    </div>
+  </div>
+{% endmacro %}

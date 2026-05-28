@@ -1,23 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="auth-page">
-  <div class="auth-page__hero">
-    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" alt="F1 Car Sketch" class="hero-image">
-  </div>
+{% from "_macros.html" import example_round_snippet %}
 
-  <div class="welcome">
+<section class="auth-page">
+  <div class="welcome" style="text-align:center;">
     <p class="welcome__lede">
       You've been invited to join<br>
       <strong>{{ league.name }}</strong>.
     </p>
+
     <p class="welcome__footnote small muted">
       Predict each Grand Prix. Closer to the truth, more points.
     </p>
   </div>
 
+  {{ example_round_snippet() }}
+
   <div class="row" style="gap:8px;justify-content:center;">
     <a href="{{ url_for('auth.register') }}" class="btn btn--primary">Create account</a>
     <a href="{{ url_for('auth.login') }}" class="btn btn--secondary">Sign in</a>
   </div>
+
+  <div class="maker-mark" style="margin-top: 8rem;">
+    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
+    <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
+      F1 Predictions
+    </span>
+  </div>
+
 </section>
 {% endblock %}
