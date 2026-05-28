@@ -13,7 +13,7 @@
 {% endif %}
 
 <p class="muted small">
-  Locks <strong>{{ round_obj.predictions_deadline|deadline_phrase }}</strong>
+  Locks <strong>{{ round_obj.predictions_deadline|local_time }}</strong>
   <span data-countdown="{{ round_obj.predictions_deadline.isoformat() }}"
         class="countdown"></span>
   · Whatever's saved at that point is what gets scored.
@@ -121,8 +121,10 @@
           {{ driver_select("special_" ~ sp.key ~ "_driver", choices,
                            selected_id=existing.get("special_" ~ sp.key ~ "_driver")) }}
         {% elif sp.input_type == 'int' %}
-          <input type="number" name="special_{{ sp.key }}_int" class="field__input"
-                 min="0" max="200"
+          <input type="text" name="special_{{ sp.key }}_int" class="field__input"
+                 inputmode="numeric"
+                 maxlength="3"
+                 data-int-only
                  value="{{ existing.get('special_' ~ sp.key ~ '_int', '') }}"
                  autocomplete="off">
         {% elif sp.input_type == 'bool' %}
@@ -300,6 +302,35 @@
       input.addEventListener('change', update);
     }
     radios.forEach((r) => r.addEventListener('change', update));
+  });
+
+  // ---- Integer-only fields ---------------------------------------------
+  // Sanitise on `input` so it works on mobile virtual keyboards (which
+  // don't reliably fire keydown). Any non-digit is stripped the instant
+  // the value changes, however the character arrived (typed, pasted,
+  // dictated). The keydown block is a desktop nicety so the dot never
+  // visibly appears; the input handler is the real cross-platform guard.
+  // Fields are type="text" + inputmode="numeric" so `.value` stays
+  // readable mid-edit (type="number" returns "" for invalid content).
+  document.querySelectorAll('input[data-int-only]').forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+    input.addEventListener('input', () => {
+      const cleaned = input.value.replace(/\D/g, '');
+      if (cleaned !== input.value) {
+        const pos = input.selectionStart;
+        const removed = input.value.length - cleaned.length;
+        input.value = cleaned;
+        // Best-effort caret restore after stripping.
+        if (pos !== null) {
+          const newPos = Math.max(0, pos - removed);
+          input.setSelectionRange(newPos, newPos);
+        }
+      }
+    });
   });
 
   // Initial button state (the observer only fires for future mutations).
