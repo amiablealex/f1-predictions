@@ -834,7 +834,10 @@ p { margin: 0 0 var(--space-3) 0; }
 .round-total__value {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+}
+.round-total__value .tooltip-trigger {
+  margin-left: -0.35rem;
 }
 .total-score-pill--primary {
   background: var(--c-surface-alt);
