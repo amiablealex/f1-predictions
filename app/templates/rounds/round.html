@@ -44,28 +44,29 @@
 <div class="round-total">
   {% if state.average_total_points is not none %}
     <div class="round-total__item round-total__item--secondary">
-      <span class="total-score-pill total-score-pill--medium">{{ state.average_total_points }}</span>
-      <span class="round-total__label">
-        Avg
+      <div class="round-total__value">
+        <span class="total-score-pill total-score-pill--medium">{{ state.average_total_points }}</span>
         <button type="button" class="tooltip-trigger"
                 aria-label="What is this?" aria-expanded="false"
                 data-tooltip="Average score of all players for this round.">i</button>
-      </span>
+      </div>
+      <span class="round-total__label">Avg</span>
     </div>
   {% endif %}
+
   <div class="round-total__item round-total__item--primary">
     <span class="total-score-pill total-score-pill--big total-score-pill--primary">{{ state.total_points }}</span>
     <span class="round-total__label">Total pts</span>
   </div>
   {% if state.highest_total_points is not none %}
     <div class="round-total__item round-total__item--tertiary">
-      <span class="total-score-pill total-score-pill--medium">{{ state.highest_total_points }}</span>
-      <span class="round-total__label">
-        Highest
+      <div class="round-total__value">
+        <span class="total-score-pill total-score-pill--medium">{{ state.highest_total_points }}</span>
         <button type="button" class="tooltip-trigger"
                 aria-label="What is this?" aria-expanded="false"
                 data-tooltip="Highest score of any player for this round.">i</button>
-      </span>
+      </div>
+      <span class="round-total__label">Highest</span>
     </div>
   {% endif %}
 </div>

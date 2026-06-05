@@ -831,6 +831,11 @@ p { margin: 0 0 var(--space-3) 0; }
   justify-self: end;
   padding-right: var(--space-3);
 }
+.round-total__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .total-score-pill--primary {
   background: var(--c-surface-alt);
 }
