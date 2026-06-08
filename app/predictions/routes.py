@@ -36,6 +36,10 @@ from app.utils import (
     round_driver_choices,
     round_team_choices,
 )
+from app.models.contribution import ContributionDefinition, ContributionPrediction
+from app.scoring.contributions import (
+    BOOL, CUSTOM_CHOICE, DECIMAL, DRIVER_PICK, INTEGER, LAP_TIME, TEAM_PICK,
+)
 
 predictions_bp = Blueprint("predictions", __name__, template_folder="../templates")
 
@@ -55,6 +59,15 @@ def _displayed_active_round() -> Round | None:
     """Locked-but-not-completed round, for the cross-banner on the form."""
     from flask import current_app
     return get_active_round(current_app.config["F1_SEASON"])
+
+
+def _round_contributions(round_id: int) -> list[ContributionDefinition]:
+    return (
+        db.session.query(ContributionDefinition)
+        .filter_by(round_id=round_id)
+        .order_by(ContributionDefinition.created_at.asc())
+        .all()
+    )
 
 
 @predictions_bp.route("/predictions", methods=["GET"])
@@ -102,6 +115,7 @@ def edit():
             SPECIALS_BY_KEY[k] for k in (rd.special_a_key, rd.special_b_key)
             if k and k in SPECIALS_BY_KEY
         ],
+        contributions=_round_contributions(rd.id),
         form=form,
         title="Predictions",
         active_round=_displayed_active_round(),
@@ -131,7 +145,7 @@ def submit():
     is_sprint = (rd.weekend_type == WeekendType.SPRINT)
 
     errors: list[str] = []
-    payload = _parse_form(request.form, valid_driver_ids, is_sprint, errors)
+    payload = _parse_form(request.form, valid_driver_ids, is_sprint, errors, contributions=_round_contributions(rd.id))
 
     if errors:
         for e in errors:
@@ -159,6 +173,7 @@ def submit():
                 SPECIALS_BY_KEY[k] for k in (rd.special_a_key, rd.special_b_key)
                 if k and k in SPECIALS_BY_KEY
             ],
+            contributions=_round_contributions(rd.id),
             form=form,
             title="Predictions",
             active_round=_displayed_active_round(),
@@ -187,7 +202,7 @@ def _int_or_none(s: str | None) -> int | None:
         return None
 
 
-def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
+def _parse_form(form, valid_driver_ids, is_sprint, errors, contributions=None) -> dict:
     """Pull all prediction values out of a posted form. Records errors
     (in-place) for display rather than raising."""
     payload: dict = {
@@ -202,6 +217,7 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
         "qh2h": None,
         "qnth": None,
         "specials": {},   # {special_key: {"driver": int|None, "int": int|None, "bool": bool|None, "team": str|None}}
+        "contributions": {},
     }
 
     # ---- race top 10 ----
@@ -358,6 +374,63 @@ def _parse_form(form, valid_driver_ids, is_sprint, errors) -> dict:
         else:
             payload["dnf_count"] = n
 
+    # ---- wildcards (contributions) ----
+    for cdef in (contributions or []):
+        field = f"wildcard_{cdef.id}"
+        raw = (form.get(field) or "").strip()
+        if raw == "":
+            continue
+        it = cdef.input_type
+        entry = {"driver": None, "team": None, "int": None,
+                 "decimal": None, "lap_ms": None, "bool": None, "choice": None}
+        if it == DRIVER_PICK:
+            d_id = _int_or_none(raw)
+            allowed = set(cdef.allowed_driver_ids or valid_driver_ids)
+            if d_id is None or d_id not in valid_driver_ids or d_id not in allowed:
+                errors.append(f"Wildcard '{cdef.question_text}': invalid driver.")
+            else:
+                entry["driver"] = d_id
+        elif it == TEAM_PICK:
+            allowed = set(cdef.allowed_team_names or [])
+            # empty allowed = unrestricted; validate against round teams in submit
+            if allowed and raw not in allowed:
+                errors.append(f"Wildcard '{cdef.question_text}': invalid team.")
+            else:
+                entry["team"] = raw
+        elif it == CUSTOM_CHOICE:
+            if raw not in set(cdef.custom_options or []):
+                errors.append(f"Wildcard '{cdef.question_text}': choose a listed option.")
+            else:
+                entry["choice"] = raw
+        elif it == BOOL:
+            if raw.lower() in ("yes", "true", "1"):
+                entry["bool"] = True
+            elif raw.lower() in ("no", "false", "0"):
+                entry["bool"] = False
+            else:
+                errors.append(f"Wildcard '{cdef.question_text}': must be yes or no.")
+        elif it == INTEGER:
+            n = _int_or_none(raw)
+            if n is None:
+                errors.append(f"Wildcard '{cdef.question_text}': must be a whole number.")
+            else:
+                entry["int"] = n
+        elif it == DECIMAL:
+            from decimal import Decimal, InvalidOperation
+            try:
+                entry["decimal"] = Decimal(raw)
+            except (InvalidOperation, ValueError):
+                errors.append(f"Wildcard '{cdef.question_text}': must be a number.")
+        elif it == LAP_TIME:
+            ms = parse_lap_time(raw)
+            if ms is None:
+                errors.append(f"Wildcard '{cdef.question_text}': must be a lap time (M:SS.mmm).")
+            else:
+                entry["lap_ms"] = ms
+        # Only keep if something parsed.
+        if any(v is not None for v in entry.values()):
+            payload["contributions"][cdef.id] = entry
+
     return payload
 
 
@@ -417,6 +490,30 @@ def _load_draft(round_id: int, user_id: int) -> dict:
         if sp.predicted_team_name is not None:
             out[f"special_{sp.special_key}_team"] = sp.predicted_team_name
 
+    for cp in (
+        db.session.query(ContributionPrediction)
+        .join(ContributionDefinition, ContributionDefinition.id == ContributionPrediction.contribution_id)
+        .filter(ContributionDefinition.round_id == round_id,
+                ContributionPrediction.user_id == user_id)
+        .all()
+    ):
+        field = f"wildcard_{cp.contribution_id}"
+        if cp.predicted_driver_id is not None:
+            out[field] = cp.predicted_driver_id
+        elif cp.predicted_team_name is not None:
+            out[field] = cp.predicted_team_name
+        elif cp.predicted_choice is not None:
+            out[field] = cp.predicted_choice
+        elif cp.predicted_bool is not None:
+            out[field] = "yes" if cp.predicted_bool else "no"
+        elif cp.predicted_int is not None:
+            out[field] = cp.predicted_int
+        elif cp.predicted_decimal is not None:
+            out[field] = format(cp.predicted_decimal.normalize(), "f")
+        elif cp.predicted_lap_time_ms is not None:
+            from app.api.jolpica import format_lap_time
+            out[field] = format_lap_time(cp.predicted_lap_time_ms)
+
     return out
 
 
@@ -435,6 +532,12 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
     db.session.query(QualiHeadToHeadPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(QualiNthPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
     db.session.query(SpecialPrediction).filter_by(user_id=user_id, round_id=round_id).delete()
+    db.session.query(ContributionPrediction).filter(
+        ContributionPrediction.user_id == user_id,
+        ContributionPrediction.contribution_id.in_(
+            db.session.query(ContributionDefinition.id).filter_by(round_id=round_id)
+        ),
+    ).delete(synchronize_session=False)
     db.session.flush()
 
     for pos, d_id in payload["top10"].items():
@@ -487,4 +590,17 @@ def _save_predictions(round_id: int, user_id: int, payload: dict, is_sprint: boo
             predicted_int=values["int"],
             predicted_bool=values["bool"],
             predicted_team_name=values["team"],
+        ))
+
+    for cdef_id, vals in payload["contributions"].items():
+        db.session.add(ContributionPrediction(
+            contribution_id=cdef_id,
+            user_id=user_id,
+            predicted_driver_id=vals["driver"],
+            predicted_team_name=vals["team"],
+            predicted_int=vals["int"],
+            predicted_decimal=vals["decimal"],
+            predicted_lap_time_ms=vals["lap_ms"],
+            predicted_bool=vals["bool"],
+            predicted_choice=vals["choice"],
         ))
