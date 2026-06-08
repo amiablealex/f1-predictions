@@ -342,3 +342,48 @@ def _special_team_pick(
         and prediction.predicted_team_name == outcome.actual_team_name
     )
     return ActualDisplay(text=text, is_exact=is_exact)
+
+def actual_for_contribution(
+    definition,
+    prediction,
+    drivers_by_id: dict[int, Driver],
+) -> ActualDisplay | None:
+    """Outcome cell for a wildcard.
+
+    None until the contributor has entered an actual. is_exact fires when
+    the user's answer earns the *primary* points — for numeric range types
+    that means within the primary range, so the tick reflects "primary
+    hit", consistent with how specials use is_exact for a clean win.
+    """
+    from app.scoring.contributions import (
+        BOOL, CUSTOM_CHOICE, DECIMAL, DRIVER_PICK, INTEGER, LAP_TIME, TEAM_PICK,
+        score_contribution,
+    )
+    if definition is None or not definition.has_actual:
+        return None
+
+    it = definition.input_type
+    if it == DRIVER_PICK:
+        text = _driver_label(drivers_by_id.get(definition.actual_driver_id))
+    elif it == TEAM_PICK:
+        text = definition.actual_team_name or "—"
+    elif it == CUSTOM_CHOICE:
+        text = definition.actual_choice or "—"
+    elif it == BOOL:
+        text = "Yes" if definition.actual_bool else "No"
+    elif it == LAP_TIME:
+        from app.api.jolpica import format_lap_time
+        text = format_lap_time(definition.actual_lap_time_ms)
+    elif it == INTEGER:
+        text = str(definition.actual_int) if definition.actual_int is not None else "—"
+    elif it == DECIMAL:
+        text = format(definition.actual_decimal.normalize(), "f") if definition.actual_decimal is not None else "—"
+    else:
+        text = "—"
+
+    # is_exact = earned primary points (clean win → tick pill).
+    is_exact = False
+    if prediction is not None:
+        pts = score_contribution(prediction, definition)
+        is_exact = pts == definition.primary_points and pts != 0
+    return ActualDisplay(text=text, is_exact=is_exact)

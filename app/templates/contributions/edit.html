@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header %}
+{% block content %}
+{{ round_header(round_obj) }}
+<h2 style="margin-top:0.5rem;">{{ 'Edit' if definition else 'New' }} wildcard</h2>
+
+<p class="muted small">
+  Write a question, choose how players answer it, and set the scoring.
+  This appears on everyone's predictions form under "Wildcards", attributed
+  to you. The result is entered manually by you after the race.
+</p>
+
+{% if confirm_needed %}
+  <div class="status-banner status-banner--pending" style="margin-bottom:1rem; display:block; grid-column:1 / -1;">
+    <strong>{{ pred_count }} user(s) have already predicted this.</strong>
+    You've changed the answer type or the available options, so their existing
+    entries for this wildcard will be cleared on save (only this wildcard —
+    nothing else on their form). Press <em>Save</em> again to confirm, or
+    Cancel to keep things as they are.
+  </div>
+{% elif pred_count %}
+  <p class="small muted">{{ pred_count }} user(s) have predicted this so far.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('contributions.edit', round_id=round_obj.id) }}"
+      class="form" id="wildcard-form">
+  {{ form.hidden_tag() }}
+  {% if confirm_needed %}<input type="hidden" name="confirm_reset" value="yes">{% endif %}
+
+  {% set ex = existing %}
+  {% macro val(field, fallback='') -%}
+    {%- if ex is not none -%}{{ ex.get(field, '') }}{%- elif definition -%}{{ fallback }}{%- endif -%}
+  {%- endmacro %}
+
+  <section class="card">
+    <div class="field">
+      <label class="field__label">Question (as players will see it)</label>
+      <input type="text" name="question_text" class="field__input" maxlength="200"
+             placeholder="e.g. Position gap between the two Mercedes drivers"
+             value="{% if ex is not none %}{{ ex.get('question_text','') }}{% elif definition %}{{ definition.question_text }}{% endif %}"
+             autocomplete="off" required>
+    </div>
+
+    <div class="field">
+      <label class="field__label">How do players answer?</label>
+      <select name="input_type" id="input_type" class="field__select" required>
+        <option value="">— select —</option>
+        {% set cur = (ex.get('input_type') if ex is not none else (definition.input_type if definition else '')) %}
+        {% for key, d in input_type_defs.items() %}
+          <option value="{{ key }}" {% if cur == key %}selected{% endif %}>{{ d.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Restricted driver set #}
+    <div class="field" data-when-type="driver_pick">
+      <label class="field__label">Limit driver choices (optional)</label>
+      <small class="muted">Tick two or more to restrict the dropdown. Leave all unticked to allow every driver.</small>
+      <div class="field__radios" style="flex-direction:column;align-items:flex-start;">
+        {% set sel_d = (ex.getlist('allowed_driver_ids') if ex is not none else (definition.allowed_driver_ids|map('string')|list if definition and definition.allowed_driver_ids else [])) %}
+        {% for c in choices %}
+          <label class="radio">
+            <input type="checkbox" name="allowed_driver_ids" value="{{ c.driver_id }}"
+                   {% if c.driver_id|string in sel_d %}checked{% endif %}>
+            {{ c.label }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Restricted team set #}
+    <div class="field" data-when-type="team_pick">
+      <label class="field__label">Limit team choices (optional)</label>
+      <small class="muted">Tick two or more to restrict the dropdown. Leave all unticked to allow every team.</small>
+      <div class="field__radios" style="flex-direction:column;align-items:flex-start;">
+        {% set sel_t = (ex.getlist('allowed_team_names') if ex is not none else (definition.allowed_team_names if definition and definition.allowed_team_names else [])) %}
+        {% for t in team_choices %}
+          <label class="radio">
+            <input type="checkbox" name="allowed_team_names" value="{{ t.name }}"
+                   {% if t.name in sel_t %}checked{% endif %}>
+            {{ t.label }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Custom options #}
+    <div class="field" data-when-type="custom_choice">
+      <label class="field__label">Options (one per line, at least two)</label>
+      <textarea name="custom_options" class="field__input" rows="4"
+                placeholder="soft&#10;medium&#10;hard">{% if ex is not none %}{{ ex.get('custom_options','') }}{% elif definition and definition.custom_options %}{{ definition.custom_options|join('\n') }}{% endif %}</textarea>
+    </div>
+  </section>
+
+  <section class="card">
+    <h4 class="card__subheader">Scoring</h4>
+
+    <div class="field field--inline">
+      <label class="field__label">Primary points</label>
+      <input type="number" name="primary_points" class="field__input" step="1"
+             value="{% if ex is not none %}{{ ex.get('primary_points','') }}{% elif definition %}{{ definition.primary_points }}{% endif %}"
+             autocomplete="off" required>
+    </div>
+
+    <div class="field" data-numeric-only>
+      <label class="field__label">Primary scoring</label>
+      <select name="primary_mode" id="primary_mode" class="field__select">
+        {% set pm = (ex.get('primary_mode') if ex is not none else (definition.primary_mode if definition else 'exact')) %}
+        <option value="exact" {% if pm == 'exact' %}selected{% endif %}>Exact only</option>
+        <option value="range" {% if pm == 'range' %}selected{% endif %}>Numerical range (±)</option>
+      </select>
+    </div>
+
+    <div class="field" data-numeric-only data-when-mode="range">
+      <label class="field__label">Primary range (±)</label>
+      <small class="muted">e.g. 3 means within 3 of the actual scores the primary points. For lap times, in seconds (e.g. 0.5).</small>
+      <input type="text" name="primary_range" class="field__input" inputmode="decimal"
+             value="{% if ex is not none %}{{ ex.get('primary_range','') }}{% elif definition and definition.primary_range is not none %}{{ definition.primary_range }}{% endif %}"
+             autocomplete="off">
+    </div>
+
+    <div class="field" data-numeric-only>
+      <label class="field__label">Secondary points (optional)</label>
+      <small class="muted">A lower consolation tier. Must be lower than primary, on a wider range. Leave blank for none.</small>
+      <input type="number" name="secondary_points" id="secondary_points" class="field__input" step="1"
+             value="{% if ex is not none %}{{ ex.get('secondary_points','') }}{% elif definition and definition.secondary_points is not none %}{{ definition.secondary_points }}{% endif %}"
+             autocomplete="off">
+    </div>
+
+    <div class="field" data-numeric-only data-when-secondary>
+      <label class="field__label">Secondary range (±)</label>
+      <input type="text" name="secondary_range" class="field__input" inputmode="decimal"
+             value="{% if ex is not none %}{{ ex.get('secondary_range','') }}{% elif definition and definition.secondary_range is not none %}{{ definition.secondary_range }}{% endif %}"
+             autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label class="field__label">Scoring note (shown under the question)</label>
+      <small class="muted">Leave blank to auto-generate from the values above. Mirrors the "within 5 laps…" style on existing predictions.</small>
+      <input type="text" name="scoring_blurb" class="field__input" maxlength="200"
+             value="{% if ex is not none %}{{ ex.get('scoring_blurb','') }}{% elif definition %}{{ definition.scoring_blurb }}{% endif %}"
+             autocomplete="off">
+    </div>
+  </section>
+
+  <div class="row" style="gap:8px;">
+    <button type="submit" class="btn btn--primary">Save</button>
+    <a href="{{ url_for('contributions.dashboard') }}" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  const form = document.getElementById('wildcard-form');
+  const typeSel = document.getElementById('input_type');
+  const modeSel = document.getElementById('primary_mode');
+  const secPts = document.getElementById('secondary_points');
+  const NUMERIC = ['integer', 'decimal', 'lap_time'];
+
+  function refresh() {
+    const t = typeSel.value;
+    const isNumeric = NUMERIC.includes(t);
+
+    // Type-specific option blocks.
+    form.querySelectorAll('[data-when-type]').forEach(el => {
+      el.style.display = (el.getAttribute('data-when-type') === t) ? '' : 'none';
+    });
+    // Numeric-only scoring controls.
+    form.querySelectorAll('[data-numeric-only]').forEach(el => {
+      el.style.display = isNumeric ? '' : 'none';
+    });
+    // Range field only when mode=range.
+    const rangeMode = modeSel && modeSel.value === 'range';
+    form.querySelectorAll('[data-when-mode="range"]').forEach(el => {
+      el.style.display = (isNumeric && rangeMode) ? '' : 'none';
+    });
+    // Secondary range only when secondary points present.
+    const hasSec = secPts && secPts.value.trim() !== '';
+    form.querySelectorAll('[data-when-secondary]').forEach(el => {
+      el.style.display = (isNumeric && hasSec) ? '' : 'none';
+    });
+  }
+
+  typeSel.addEventListener('change', refresh);
+  if (modeSel) modeSel.addEventListener('change', refresh);
+  if (secPts) secPts.addEventListener('input', refresh);
+  refresh();
+})();
+</script>
+{% endblock %}

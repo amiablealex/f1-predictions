@@ -225,3 +225,20 @@ def issue_password_reset(user_id: int):
     reset_url = url_for("auth.reset_password", token=token.token, _external=True)
     flash(f"Reset link for {user.username} (valid {ttl}h): {reset_url}", "info")
     return redirect(url_for("admin.dashboard"))
+
+@admin_bp.route("/user/<int:user_id>/contributor-toggle", methods=["POST"])
+@login_required
+@admin_required
+def user_contributor_toggle(user_id: int):
+    if not FlaskForm().validate_on_submit():
+        abort(400)
+    user = db.session.get(User, user_id)
+    if user is None:
+        abort(404)
+    user.is_contributor = not user.is_contributor
+    db.session.commit()
+    flash(
+        f"{user.username}: contributor {'enabled' if user.is_contributor else 'disabled'}.",
+        "info",
+    )
+    return redirect(url_for("admin.dashboard"))

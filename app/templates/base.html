@@ -79,6 +79,9 @@
           <li><a href="{{ url_for('leagues.index') }}" class="drawer__link">Leagues</a></li>
           <li><a href="{{ url_for('rules.index') }}" class="drawer__link">Scoring</a></li>
           <li><a href="{{ url_for('auth.account') }}" class="drawer__link">Account</a></li>
+          {% if current_user.is_contributor or current_user.is_admin %}
+            <li><a href="{{ url_for('contributions.dashboard') }}" class="drawer__link">Contribute</a></li>
+          {% endif %}
           {% if current_user.is_admin %}
             <li><a href="{{ url_for('admin.dashboard') }}" class="drawer__link">Admin</a></li>
           {% endif %}

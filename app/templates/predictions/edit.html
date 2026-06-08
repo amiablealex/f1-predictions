@@ -44,6 +44,7 @@
              inputmode="numeric"
              pattern="[0-9:.]*"
              maxlength="8"
+             data-lap-time
              autocomplete="off">
       <small class="field__error" data-pole-error hidden></small>
     </div>
@@ -156,6 +157,65 @@
     {% endfor %}
   </section>
 
+  {% if contributions %}
+    <section class="card">
+      <h3>Wildcards</h3>
+      <p class="small muted">One-off predictions set by other players. Same rule: closer scores more.</p>
+      {% for c in contributions %}
+        <div class="field field--prediction">
+          <label class="field__label">{{ c.question_text }}</label>
+          {% set fld = "wildcard_" ~ c.id %}
+
+          {% if c.input_type == 'driver_pick' %}
+            {% set dchoices = choices if not c.allowed_driver_ids else choices|selectattr('driver_id', 'in', c.allowed_driver_ids)|list %}
+            {{ driver_select(fld, dchoices, selected_id=existing.get(fld)) }}
+
+          {% elif c.input_type == 'team_pick' %}
+            {% set tchoices = team_choices if not c.allowed_team_names else team_choices|selectattr('name', 'in', c.allowed_team_names)|list %}
+            <select name="{{ fld }}" class="field__select">
+              <option value="">— select —</option>
+              {% for t in tchoices %}
+                <option value="{{ t.name }}" {% if existing.get(fld) == t.name %}selected{% endif %}>{{ t.label }}</option>
+              {% endfor %}
+            </select>
+
+          {% elif c.input_type == 'custom_choice' %}
+            <select name="{{ fld }}" class="field__select">
+              <option value="">— select —</option>
+              {% for o in c.custom_options %}
+                <option value="{{ o }}" {% if existing.get(fld) == o %}selected{% endif %}>{{ o }}</option>
+              {% endfor %}
+            </select>
+
+          {% elif c.input_type == 'bool' %}
+            <div class="field__radios">
+              <label class="radio"><input type="radio" name="{{ fld }}" value="yes"
+                {% if existing.get(fld) == 'yes' %}checked{% endif %}> Yes</label>
+              <label class="radio"><input type="radio" name="{{ fld }}" value="no"
+                {% if existing.get(fld) == 'no' %}checked{% endif %}> No</label>
+            </div>
+
+          {% elif c.input_type == 'lap_time' %}
+            <input type="text" name="{{ fld }}" class="field__input" inputmode="numeric"
+                   pattern="[0-9:.]*" maxlength="8" placeholder="M:SS.mmm" data-lap-time
+                   value="{{ existing.get(fld, '') }}" autocomplete="off">
+
+          {% elif c.input_type == 'integer' %}
+            <input type="text" name="{{ fld }}" class="field__input" inputmode="numeric"
+                   maxlength="4" data-int-only
+                   value="{{ existing.get(fld, '') }}" autocomplete="off">
+
+          {% elif c.input_type == 'decimal' %}
+            <input type="text" name="{{ fld }}" class="field__input" inputmode="decimal"
+                   value="{{ existing.get(fld, '') }}" autocomplete="off">
+          {% endif %}
+
+          <small class="muted">{{ c.scoring_blurb }} · set by {{ c.contributor.username }}</small>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
   <div class="sticky-save">
     <div class="form-status"
          data-form-status
@@ -178,17 +238,18 @@
 <script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>
 
 <script>
-// Pole time input mask + empty-state tracker for prediction fields.
-// Inline because both behaviours are scoped to this template only.
+// Submit-button state + empty-state tracker, scoped to this form. The
+// pole-time mask and integer-only sanitiser now live in predictions.js
+// (shared with the contributor actual form).
 (function () {
   const form = document.querySelector('form.predictions-form');
   if (!form) return;
   const submitBtn = form.querySelector('button[type="submit"]');
 
   // ---- Submit button state ---------------------------------------------
-  // Single source of truth: disabled whenever any field in the form
-  // carries the .field--error class. This coordinates naturally with the
-  // duplicate-driver detector in predictions.js, which uses the same class.
+  // Disabled whenever any field carries .field--error. Coordinates with the
+  // duplicate-driver detector AND the shared lap-time validator (both set
+  // that class), so an invalid pole/wildcard lap time also blocks save.
   const updateSubmitState = () => {
     if (!submitBtn) return;
     submitBtn.disabled = form.querySelectorAll('.field--error').length > 0;
@@ -199,94 +260,10 @@
     attributeFilter: ['class'],
   });
 
-  // ---- Pole time mask + validation -------------------------------------
-  const pole = form.querySelector('input[name="pole_time"]');
-  if (pole) {
-    const field = pole.closest('.field');
-    const errorEl = field.querySelector('[data-pole-error]');
-
-    const format = (digits) => {
-      digits = digits.slice(0, 6);
-      if (digits.length === 0) return '';
-      let out = digits[0];
-      if (digits.length >= 2) out += ':' + digits.slice(1, 3);
-      if (digits.length >= 4) out += '.' + digits.slice(3, 6);
-      return out;
-    };
-
-    const validate = (value) => {
-      const digits = value.replace(/\D/g, '');
-      if (digits.length === 0) return { valid: true, normalized: '' };
-      if (digits.length < 3) {
-        return { valid: false, message: 'Pole time needs at least M:SS (e.g. 1:23).' };
-      }
-      const seconds = digits.slice(1, 3);
-      if (parseInt(seconds, 10) > 59) {
-        return { valid: false, message: 'Seconds must be 00–59.' };
-      }
-      const ms = (digits.slice(3) + '000').slice(0, 3);
-      return { valid: true, normalized: `${digits[0]}:${seconds}.${ms}` };
-    };
-
-    const setError = (msg) => {
-      field.classList.add('field--error');
-      errorEl.textContent = msg;
-      errorEl.hidden = false;
-    };
-    const clearError = () => {
-      field.classList.remove('field--error');
-      errorEl.textContent = '';
-      errorEl.hidden = true;
-    };
-
-    // While typing: keep the mask in sync and clear any stale error if
-    // the value has become valid. Never set new errors here — those wait
-    // until blur, so we don't nag mid-typing.
-    pole.addEventListener('input', () => {
-      pole.value = format(pole.value.replace(/\D/g, ''));
-      const result = validate(pole.value);
-      if (result.valid) clearError();
-    });
-
-    // On blur: full check. Set error if invalid, normalise if valid.
-    pole.addEventListener('blur', () => {
-      const result = validate(pole.value);
-      if (!result.valid) {
-        setError(result.message);
-      } else {
-        clearError();
-        if (result.normalized !== pole.value) pole.value = result.normalized;
-      }
-    });
-
-    // Safety net at submit time. The button is disabled while invalid,
-    // so this mainly catches the edge case of submission without blur.
-    form.addEventListener('submit', (e) => {
-      const result = validate(pole.value);
-      if (!result.valid) {
-        e.preventDefault();
-        setError(result.message);
-        pole.focus();
-        pole.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (result.normalized !== pole.value) {
-        pole.value = result.normalized;
-      }
-    });
-
-    // Normalise + validate any server-rendered value on page load.
-    if (pole.value) {
-      pole.value = format(pole.value.replace(/\D/g, ''));
-      const result = validate(pole.value);
-      if (!result.valid) setError(result.message);
-    }
-  }
-
   // ---- Empty-state tracker --------------------------------------------
-  // Sets data-empty on any .field--prediction whose input has no value.
   document.querySelectorAll('.field--prediction').forEach((f) => {
     const radios = f.querySelectorAll('input[type="radio"]');
     const input = f.querySelector('input:not([type="radio"]), select');
-
     const isEmpty = () => {
       if (radios.length > 0) return !Array.from(radios).some((r) => r.checked);
       return !input || !input.value;
@@ -295,7 +272,6 @@
       if (isEmpty()) f.setAttribute('data-empty', '');
       else f.removeAttribute('data-empty');
     };
-
     update();
     if (input) {
       input.addEventListener('input', update);
@@ -304,36 +280,7 @@
     radios.forEach((r) => r.addEventListener('change', update));
   });
 
-  // ---- Integer-only fields ---------------------------------------------
-  // Sanitise on `input` so it works on mobile virtual keyboards (which
-  // don't reliably fire keydown). Any non-digit is stripped the instant
-  // the value changes, however the character arrived (typed, pasted,
-  // dictated). The keydown block is a desktop nicety so the dot never
-  // visibly appears; the input handler is the real cross-platform guard.
-  // Fields are type="text" + inputmode="numeric" so `.value` stays
-  // readable mid-edit (type="number" returns "" for invalid content).
-  document.querySelectorAll('input[data-int-only]').forEach((input) => {
-    input.addEventListener('keydown', (e) => {
-      if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) {
-        e.preventDefault();
-      }
-    });
-    input.addEventListener('input', () => {
-      const cleaned = input.value.replace(/\D/g, '');
-      if (cleaned !== input.value) {
-        const pos = input.selectionStart;
-        const removed = input.value.length - cleaned.length;
-        input.value = cleaned;
-        // Best-effort caret restore after stripping.
-        if (pos !== null) {
-          const newPos = Math.max(0, pos - removed);
-          input.setSelectionRange(newPos, newPos);
-        }
-      }
-    });
-  });
-
-  // Initial button state (the observer only fires for future mutations).
+  // Initial button state (observer only fires for future mutations).
   updateSubmitState();
 })();
 </script>

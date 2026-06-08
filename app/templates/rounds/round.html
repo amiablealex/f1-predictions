@@ -314,6 +314,56 @@
   </div>
 </section>
 
+{% if state.contribution_defs %}
+<section class="card">
+  <div class="row row--space">
+    <h3>Wildcards</h3>
+    <div class="row">
+      {{ phase_score_pill(state.contribution_points) }}
+    </div>
+  </div>
+  <div class="phase-grid">
+    <div class="pred-row pred-row--head">
+      <div class="pred-row__label"></div>
+      <div class="pred-row__predicted"></div>
+      <div class="pred-row__actual">Result</div>
+      <div class="pred-row__points">Pts</div>
+    </div>
+    {% for c in state.contribution_defs %}
+      {% set pred = state.contribution_preds.get(c.id) %}
+      <div class="pred-row">
+        <div class="pred-row__label small muted">
+          {{ c.question_text }}
+          <div class="xs muted">set by {{ c.contributor.username }}</div>
+        </div>
+        <div class="pred-row__predicted">
+          {%- if pred is none -%}—
+          {%- elif c.input_type == 'driver_pick' and pred.predicted_driver_id in drivers -%}
+            {{ drivers[pred.predicted_driver_id]|driver_label }}
+          {%- elif c.input_type == 'team_pick' and pred.predicted_team_name -%}
+            {{ pred.predicted_team_name }}
+          {%- elif c.input_type == 'custom_choice' and pred.predicted_choice -%}
+            {{ pred.predicted_choice }}
+          {%- elif c.input_type == 'bool' and pred.predicted_bool is not none -%}
+            {{ 'Yes' if pred.predicted_bool else 'No' }}
+          {%- elif c.input_type == 'lap_time' and pred.predicted_lap_time_ms -%}
+            {{ pred.predicted_lap_time_ms|pole_time }}
+          {%- elif c.input_type == 'integer' and pred.predicted_int is not none -%}
+            {{ pred.predicted_int }}
+          {%- elif c.input_type == 'decimal' and pred.predicted_decimal is not none -%}
+            {{ pred.predicted_decimal }}
+          {%- else -%}—{%- endif -%}
+        </div>
+        <div class="pred-row__actual small muted">{{ result_cell(state.contribution_actuals.get(c.id)) }}</div>
+        <div class="pred-row__points">
+          {{ points_pill(state.contribution_scores[c.id].points if c.id in state.contribution_scores else None, "special") }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if state.any_substitution %}
   <p class="muted small" style="margin-top:1rem;">* car was driven by a substitute driver</p>
 {% endif %}

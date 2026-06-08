@@ -165,3 +165,120 @@
   tick();
   const timer = setInterval(tick, 1000);
 })();
+
+// Shared lap-time mask (M:SS.mmm) for any input[data-lap-time]. Extracted
+// from the predictions template so the pole-time field, wildcard lap-time
+// fields, and the contributor actual form share one implementation.
+(function () {
+  const inputs = document.querySelectorAll('input[data-lap-time]');
+  if (!inputs.length) return;
+
+  const format = (digits) => {
+    digits = digits.slice(0, 6);
+    if (digits.length === 0) return '';
+    let out = digits[0];
+    if (digits.length >= 2) out += ':' + digits.slice(1, 3);
+    if (digits.length >= 4) out += '.' + digits.slice(3, 6);
+    return out;
+  };
+
+  const validate = (value) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 0) return { valid: true, normalized: '' };
+    if (digits.length < 3) {
+      return { valid: false, message: 'Lap time needs at least M:SS (e.g. 1:23).' };
+    }
+    const seconds = digits.slice(1, 3);
+    if (parseInt(seconds, 10) > 59) {
+      return { valid: false, message: 'Seconds must be 00–59.' };
+    }
+    const ms = (digits.slice(3) + '000').slice(0, 3);
+    return { valid: true, normalized: `${digits[0]}:${seconds}.${ms}` };
+  };
+
+  const errorEl = (field) => {
+    let el = field.querySelector('.field__error');
+    if (!el) {
+      el = document.createElement('small');
+      el.className = 'field__error';
+      field.appendChild(el);
+    }
+    return el;
+  };
+  const setError = (field, msg) => {
+    field.classList.add('field--error');
+    const el = errorEl(field);
+    el.textContent = msg;
+    el.hidden = false;
+  };
+  const clearError = (field) => {
+    field.classList.remove('field--error');
+    const el = field.querySelector('.field__error');
+    if (el) { el.textContent = ''; el.hidden = true; }
+  };
+
+  inputs.forEach((input) => {
+    const field = input.closest('.field') || input.parentElement;
+
+    input.addEventListener('input', () => {
+      input.value = format(input.value.replace(/\D/g, ''));
+      if (validate(input.value).valid) clearError(field);
+    });
+
+    input.addEventListener('blur', () => {
+      const result = validate(input.value);
+      if (!result.valid) {
+        setError(field, result.message);
+      } else {
+        clearError(field);
+        if (result.normalized !== input.value) input.value = result.normalized;
+      }
+    });
+
+    const form = input.closest('form');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        const result = validate(input.value);
+        if (!result.valid) {
+          e.preventDefault();
+          setError(field, result.message);
+          input.focus();
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (result.normalized !== input.value) {
+          input.value = result.normalized;
+        }
+      });
+    }
+
+    // Normalise any server-rendered value on load.
+    if (input.value) {
+      input.value = format(input.value.replace(/\D/g, ''));
+      if (!validate(input.value).valid) setError(field, validate(input.value).message);
+    }
+  });
+})();
+
+// Shared integer-only sanitiser for any input[data-int-only]. Strips on the
+// `input` event so it works on mobile virtual keyboards (which don't reliably
+// fire keydown); the keydown block is a desktop nicety.
+(function () {
+  const inputs = document.querySelectorAll('input[data-int-only]');
+  if (!inputs.length) return;
+  inputs.forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+    });
+    input.addEventListener('input', () => {
+      const cleaned = input.value.replace(/\D/g, '');
+      if (cleaned !== input.value) {
+        const pos = input.selectionStart;
+        const removed = input.value.length - cleaned.length;
+        input.value = cleaned;
+        if (pos !== null) {
+          const newPos = Math.max(0, pos - removed);
+          input.setSelectionRange(newPos, newPos);
+        }
+      }
+    });
+  });
+})();

@@ -34,6 +34,7 @@ from app.models.prediction import (
     Top10Prediction,
 )
 from app.models.special import SpecialOutcome
+from app.models.contribution import ContributionDefinition, ContributionPrediction
 from app.round_display import (
     ActualDisplay,
     actual_for_dnf_count,
@@ -368,6 +369,21 @@ def _build_actuals(
 
     return actuals, special_actuals, any_sub
 
+def _build_contribution_actuals(
+    contribution_defs: list,
+    contribution_preds: dict,
+    drivers_by_id: dict[int, Driver],
+) -> dict[int, ActualDisplay]:
+    """Pre-compute the actual cell for each wildcard on the round."""
+    from app.round_display import actual_for_contribution
+    out: dict[int, ActualDisplay] = {}
+    for d in contribution_defs:
+        ad = actual_for_contribution(
+            d, contribution_preds.get(d.id), drivers_by_id,
+        )
+        if ad is not None:
+            out[d.id] = ad
+    return out
 
 def load_round_state(round_id: int, user_id: int) -> RoundUserState:
     """Materialise everything needed for the round view for this user."""
@@ -415,16 +431,36 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         round_id=round_id).all()
     special_outcomes = {o.special_key: o for o in outcomes_rows}
 
+    # ---- Wildcards (contributions) ----
+    contribution_defs = (
+        db.session.query(ContributionDefinition)
+        .filter_by(round_id=round_id)
+        .order_by(ContributionDefinition.created_at.asc())
+        .all()
+    )
+    contribution_preds = {
+        cp.contribution_id: cp for cp in db.session.query(ContributionPrediction)
+        .join(ContributionDefinition,
+              ContributionDefinition.id == ContributionPrediction.contribution_id)
+        .filter(ContributionDefinition.round_id == round_id,
+                ContributionPrediction.user_id == user_id)
+        .all()
+    }
+
     score_rows = db.session.query(PredictionScore).filter_by(
         user_id=user_id, round_id=round_id,
     ).all()
     scores = {
         (s.kind, s.position): s for s in score_rows
-        if s.kind != PredictionType.SPECIAL
+        if s.kind not in (PredictionType.SPECIAL, PredictionType.CONTRIBUTION)
     }
     special_scores = {
         s.special_key: s for s in score_rows
         if s.kind == PredictionType.SPECIAL and s.special_key is not None
+    }
+    contribution_scores = {
+        s.contribution_id: s for s in score_rows
+        if s.kind == PredictionType.CONTRIBUTION and s.contribution_id is not None
     }
     total_points = sum(s.points for s in score_rows)
 
@@ -436,6 +472,10 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         qnth, qh2h, fastest_lap, dnf_count,
         places_gained, quali_random_driver,
         specials, special_outcomes,
+    )
+
+    contribution_actuals = _build_contribution_actuals(
+        contribution_defs, contribution_preds, drivers_by_id,
     )
 
     # Per-phase point sums. None when no rows for that phase exist yet
@@ -454,6 +494,7 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
     sprint_points: int | None = None
     quali_points: int | None = None
     race_points: int | None = None
+    contribution_points: int | None = None
     for row in score_rows:
         if row.kind in _sprint_kinds:
             sprint_points = (sprint_points or 0) + row.points
@@ -461,6 +502,8 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
             quali_points = (quali_points or 0) + row.points
         elif row.kind in _race_kinds:
             race_points = (race_points or 0) + row.points
+        elif row.kind == PredictionType.CONTRIBUTION:
+            contribution_points = (contribution_points or 0) + row.points
 
     avg, highest = round_average_and_highest(round_id)
 
@@ -481,6 +524,11 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         special_outcomes=special_outcomes,
         actuals=actuals,
         special_actuals=special_actuals,
+        contribution_defs=contribution_defs,
+        contribution_preds=contribution_preds,
+        contribution_actuals=contribution_actuals,
+        contribution_scores=contribution_scores,
+        contribution_points=contribution_points,
         any_substitution=any_sub,
         sprint_points=sprint_points,
         quali_points=quali_points,
@@ -559,6 +607,11 @@ class RoundUserState:
     scores: dict[tuple[PredictionType, int | None], PredictionScore]
     # Score rows for specials, keyed by special_key.
     special_scores: dict[str, PredictionScore]
+    contribution_defs: list                       # list[ContributionDefinition]
+    contribution_preds: dict                       # {contribution_id: ContributionPrediction}
+    contribution_actuals: dict                     # {contribution_id: ActualDisplay}
+    contribution_scores: dict                      # {contribution_id: PredictionScore}
+    contribution_points: int | None
     total_points: int
     # Reference points from across the app for the round-view header trio.
     # Both None when nobody has any score for this round yet.
@@ -573,6 +626,20 @@ def _drivers_lookup(round_obj: Round) -> dict[int, Driver]:
     for s in round_obj.sessions:
         for r in s.results:
             ids.add(r.actual_driver_id)
+    # Wildcard driver picks + actuals for this round.
+    for d in db.session.query(ContributionDefinition).filter_by(round_id=round_obj.id).all():
+        if d.actual_driver_id:
+            ids.add(d.actual_driver_id)
+        if d.allowed_driver_ids:
+            ids.update(d.allowed_driver_ids)
+    for cp in (
+        db.session.query(ContributionPrediction)
+        .join(ContributionDefinition, ContributionDefinition.id == ContributionPrediction.contribution_id)
+        .filter(ContributionDefinition.round_id == round_obj.id)
+        .all()
+    ):
+        if cp.predicted_driver_id:
+            ids.add(cp.predicted_driver_id)
     if not ids:
         return {}
     rows = db.session.query(Driver).filter(Driver.id.in_(ids)).all()
@@ -735,3 +802,70 @@ def admin_required(view):
             abort(403)
         return view(*args, **kwargs)
     return wrapped
+
+def contributor_required(view):
+    """Require current_user.is_contributor. Use after @login_required."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_contributor:
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+def contributor_or_admin_required(view):
+    """Require current_user.is_contributor OR is_admin. Used for routes an
+    admin may reach in their oversight capacity (the contributions overview
+    and the actual-submission safety net) without being a contributor."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated or not (
+            current_user.is_contributor or current_user.is_admin
+        ):
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+# =============================================================================
+# Contribution Helpers
+# =============================================================================
+
+
+def contribution_edit_cutoff(round_obj: Round) -> datetime | None:
+    """The instant after which a round's wildcard definitions lock.
+
+    Local midnight (00:00) of the predictions deadline's calendar date,
+    returned as UTC. Deadline 20 Jun 14:00 local → cutoff 20 Jun 00:00
+    local → editable through 19 Jun 23:59:59. None if no deadline set.
+    """
+    if round_obj.predictions_deadline is None:
+        return None
+    from flask import current_app
+    tz = current_app.config["TIMEZONE"]
+    deadline = round_obj.predictions_deadline
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    local_date = deadline.astimezone(tz).date()
+    local_midnight = datetime(
+        local_date.year, local_date.month, local_date.day, tzinfo=tz,
+    )
+    return local_midnight.astimezone(timezone.utc)
+
+
+def contribution_window_open(round_obj: Round, now: datetime | None = None) -> bool:
+    """True if a contributor may still create/edit/delete a definition for
+    this round (i.e. before the day-before cutoff)."""
+    cutoff = contribution_edit_cutoff(round_obj)
+    if cutoff is None:
+        return False
+    now = now or datetime.now(timezone.utc)
+    return now < cutoff
+
+
+def contribution_prediction_count(contribution_id: int) -> int:
+    """How many users have entered a prediction for this wildcard."""
+    return (
+        db.session.query(ContributionPrediction)
+        .filter_by(contribution_id=contribution_id)
+        .count()
+    )
