@@ -34,6 +34,7 @@ from app.models.prediction import (
     Top10Prediction,
 )
 from app.models.special import SpecialOutcome
+from app.models.contribution import ContributionDefinition, ContributionPrediction
 from app.round_display import (
     ActualDisplay,
     actual_for_dnf_count,
@@ -735,3 +736,56 @@ def admin_required(view):
             abort(403)
         return view(*args, **kwargs)
     return wrapped
+
+def contributor_required(view):
+    """Require current_user.is_contributor. Use after @login_required."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_contributor:
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+# =============================================================================
+# Contribution Helpers
+# =============================================================================
+
+
+def contribution_edit_cutoff(round_obj: Round) -> datetime | None:
+    """The instant after which a round's wildcard definitions lock.
+
+    Local midnight (00:00) of the predictions deadline's calendar date,
+    returned as UTC. Deadline 20 Jun 14:00 local → cutoff 20 Jun 00:00
+    local → editable through 19 Jun 23:59:59. None if no deadline set.
+    """
+    if round_obj.predictions_deadline is None:
+        return None
+    from flask import current_app
+    tz = current_app.config["TIMEZONE"]
+    deadline = round_obj.predictions_deadline
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    local_date = deadline.astimezone(tz).date()
+    local_midnight = datetime(
+        local_date.year, local_date.month, local_date.day, tzinfo=tz,
+    )
+    return local_midnight.astimezone(timezone.utc)
+
+
+def contribution_window_open(round_obj: Round, now: datetime | None = None) -> bool:
+    """True if a contributor may still create/edit/delete a definition for
+    this round (i.e. before the day-before cutoff)."""
+    cutoff = contribution_edit_cutoff(round_obj)
+    if cutoff is None:
+        return False
+    now = now or datetime.now(timezone.utc)
+    return now < cutoff
+
+
+def contribution_prediction_count(contribution_id: int) -> int:
+    """How many users have entered a prediction for this wildcard."""
+    return (
+        db.session.query(ContributionPrediction)
+        .filter_by(contribution_id=contribution_id)
+        .count()
+    )

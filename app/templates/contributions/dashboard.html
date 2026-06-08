@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Contribute</h1>
+<p class="muted small">
+  Set one wildcard prediction per round — your own question, scored your way.
+  Editable until the day before each round's deadline. After the race, you
+  enter the actual result and it scores automatically.
+</p>
+
+<section class="card">
+  <h3>Rounds</h3>
+  {% for row in rows %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--c-border);">
+      <div class="row row--space">
+        <div>
+          <div>{{ row.round.round_number }}. {{ row.round.gp_name }}</div>
+          <div class="small muted">
+            {% if row.is_set %}
+              <span class="pill pill--status-completed">set</span>
+              {{ row.definition.question_text }}
+            {% else %}
+              <span class="pill pill--status-upcoming">not set</span>
+            {% endif %}
+            {% if row.has_actual %} · <span class="pill pill--status-completed">actual in</span>{% endif %}
+          </div>
+        </div>
+        <div class="row" style="gap:4px;">
+          {% if row.window_open and not row.has_actual %}
+            <a href="{{ url_for('contributions.edit', round_id=row.round.id) }}"
+               class="btn btn--small btn--secondary">{{ 'Edit' if row.is_set else 'Set' }}</a>
+            {% if row.is_set %}
+              <form method="post" action="{{ url_for('contributions.delete', round_id=row.round.id) }}"
+                    style="margin:0;"
+                    onsubmit="return confirm('Delete this wildcard? {% if row.pred_count %}{{ row.pred_count }} prediction(s) will be removed.{% endif %}');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn--small btn--secondary">Delete</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <span class="pill pill--status-pending">locked</span>
+          {% endif %}
+          {% if row.is_set and row.is_locked %}
+            <a href="{{ url_for('contributions.actual', round_id=row.round.id) }}"
+               class="btn btn--small btn--primary">
+              {{ 'Edit actual' if row.has_actual else 'Submit actual' }}
+            </a>
+          {% endif %}
+        </div>
+      </div>
+      {% if row.is_set and row.pred_count %}
+        <div class="xs muted" style="margin-top:4px;">{{ row.pred_count }} user(s) have predicted this</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header, driver_select %}
+{% block content %}
+{{ round_header(round_obj) }}
+<h2 style="margin-top:0.5rem;">Submit actual result</h2>
+
+<section class="card">
+  <div class="small muted">Your wildcard</div>
+  <div style="margin:4px 0;">{{ definition.question_text }}</div>
+  <div class="xs muted">{{ definition.scoring_blurb }}</div>
+</section>
+
+<form method="post" action="{{ url_for('contributions.actual', round_id=round_obj.id) }}" class="form">
+  {{ form.hidden_tag() }}
+  <section class="card">
+    <div class="field field--prediction">
+      <label class="field__label">Actual result</label>
+
+      {% if definition.input_type == 'driver_pick' %}
+        {% set dchoices = choices if not definition.allowed_driver_ids else choices|selectattr('driver_id', 'in', definition.allowed_driver_ids)|list %}
+        {{ driver_select("actual", dchoices,
+             selected_id=definition.actual_driver_id) }}
+
+      {% elif definition.input_type == 'team_pick' %}
+        {% set tchoices = team_choices if not definition.allowed_team_names else team_choices|selectattr('name', 'in', definition.allowed_team_names)|list %}
+        <select name="actual" class="field__select">
+          <option value="">— select —</option>
+          {% for t in tchoices %}
+            <option value="{{ t.name }}" {% if definition.actual_team_name == t.name %}selected{% endif %}>{{ t.label }}</option>
+          {% endfor %}
+        </select>
+
+      {% elif definition.input_type == 'custom_choice' %}
+        <select name="actual" class="field__select">
+          <option value="">— select —</option>
+          {% for o in definition.custom_options %}
+            <option value="{{ o }}" {% if definition.actual_choice == o %}selected{% endif %}>{{ o }}</option>
+          {% endfor %}
+        </select>
+
+      {% elif definition.input_type == 'bool' %}
+        <div class="field__radios">
+          <label class="radio"><input type="radio" name="actual" value="yes"
+            {% if definition.actual_bool == true %}checked{% endif %}> Yes</label>
+          <label class="radio"><input type="radio" name="actual" value="no"
+            {% if definition.actual_bool == false %}checked{% endif %}> No</label>
+        </div>
+
+      {% elif definition.input_type == 'lap_time' %}
+        <input type="text" name="actual" class="field__input" inputmode="numeric"
+               pattern="[0-9:.]*" maxlength="8" placeholder="M:SS.mmm" data-lap-time
+               value="{{ definition.actual_lap_time_ms|pole_time if definition.actual_lap_time_ms else '' }}"
+               autocomplete="off">
+
+      {% elif definition.input_type == 'integer' %}
+        <input type="text" name="actual" class="field__input" inputmode="numeric"
+               maxlength="4" data-int-only
+               value="{{ definition.actual_int if definition.actual_int is not none else '' }}"
+               autocomplete="off">
+
+      {% elif definition.input_type == 'decimal' %}
+        <input type="text" name="actual" class="field__input" inputmode="decimal"
+               value="{{ definition.actual_decimal if definition.actual_decimal is not none else '' }}"
+               autocomplete="off">
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="row" style="gap:8px;">
+    <button type="submit" class="btn btn--primary">Save actual &amp; score</button>
+    <a href="{{ url_for('contributions.dashboard') }}" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+
+<script src="{{ url_for('static', filename='js/predictions.js') }}" defer></script>
+{% endblock %}
