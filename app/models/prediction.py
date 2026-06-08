@@ -37,6 +37,7 @@ class PredictionType(str, enum.Enum):
     QUALI_HEAD_TO_HEAD = "quali_head_to_head"
     QUALI_NTH = "quali_nth"
     SPECIAL = "special"
+    CONTRIBUTION = "contribution"
 
 
 # -----------------------------------------------------------------------------
@@ -302,8 +303,8 @@ class PredictionScore(db.Model):
     __tablename__ = "prediction_scores"
     __table_args__ = (
         UniqueConstraint(
-            "user_id", "round_id", "kind", "position", "special_key",
-            name="uq_score_user_round_kind_position_special",
+            "user_id", "round_id", "kind", "position", "special_key", "contribution_id",
+            name="uq_score_user_round_kind_position_special_contribution",
         ),
     )
 
@@ -320,6 +321,12 @@ class PredictionScore(db.Model):
     # For SPECIAL kind: which special this score row is for (matches
     # Round.special_a_key / special_b_key). NULL for all other kinds.
     special_key: Mapped[str | None] = mapped_column(String(40))
+    # For CONTRIBUTION kind: which wildcard this score row is for. NULL for
+    # all other kinds. In the constraint so two contributors' wildcards in
+    # one round don't collide on (kind=CONTRIBUTION, position=NULL).
+    contribution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contribution_definitions.id", ondelete="CASCADE"),
+    )
     points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 

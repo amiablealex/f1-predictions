@@ -7,6 +7,7 @@ Flask-Migrate needs to autogenerate migrations.
 from app.models.driver import Driver, RoundDriver
 from app.models.league import League, LeagueMembership
 from app.models.pitstop import PitStop
+from app.models.contribution import ContributionDefinition, ContributionPrediction
 from app.models.prediction import (
     DnfCountPrediction,
     FastestLapPrediction,
@@ -32,6 +33,8 @@ __all__ = [
     "League",
     "LeagueMembership",
     "PitStop",
+    "ContributionDefinition",
+    "ContributionPrediction",
     "Round",
     "RoundScoringConfig",
     "Session",
