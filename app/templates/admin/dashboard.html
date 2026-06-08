@@ -41,26 +41,43 @@
     <p class="muted">No rounds in the DB yet. Run schedule sync.</p>
   {% else %}
     {% for r in rounds %}
-      <div class="row row--space" style="padding:6px 0;border-bottom:1px solid var(--c-border);">
-        <div>
-          <div>{{ r.round_number }}. {{ r.gp_name }}</div>
-          <div class="small muted">
-            {{ r.weekend_type.value }} · {{ r.state.value }}
-            {% if r.predictions_locked %}· locked{% endif %}
+      <div style="padding:8px 0;border-bottom:1px solid var(--c-border);">
+        <div class="row row--space">
+          <div>
+            <div>{{ r.round_number }}. {{ r.gp_name }}</div>
+            <div class="small muted">
+              {{ r.weekend_type.value }} · {{ r.state.value }}
+              {% if r.predictions_locked %}· locked{% endif %}
+            </div>
+          </div>
+          <div class="row" style="gap:4px;">
+            <form method="post" action="{{ url_for('admin.round_lock_toggle', round_id=r.id) }}" style="margin:0;">
+              {{ bare_csrf.hidden_tag() }}
+              <button type="submit" class="btn btn--small btn--secondary">
+                {{ 'Unlock' if r.predictions_locked else 'Lock' }}
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('admin.round_rescore', round_id=r.id) }}" style="margin:0;">
+              {{ bare_csrf.hidden_tag() }}
+              <button type="submit" class="btn btn--small btn--secondary">Re-score</button>
+            </form>
           </div>
         </div>
-        <div class="row" style="gap:4px;">
-          <form method="post" action="{{ url_for('admin.round_lock_toggle', round_id=r.id) }}" style="margin:0;">
-            {{ bare_csrf.hidden_tag() }}
-            <button type="submit" class="btn btn--small btn--secondary">
-              {{ 'Unlock' if r.predictions_locked else 'Lock' }}
-            </button>
-          </form>
-          <form method="post" action="{{ url_for('admin.round_rescore', round_id=r.id) }}" style="margin:0;">
-            {{ bare_csrf.hidden_tag() }}
-            <button type="submit" class="btn btn--small btn--secondary">Re-score</button>
-          </form>
-        </div>
+
+        {% set refreshable = r.sessions | selectattr('status.value', 'in', ('completed', 'pending_results')) | list %}
+        {% if refreshable %}
+          <div style="margin-top:6px;padding-left:12px;display:flex;flex-direction:column;gap:4px;">
+            {% for s in refreshable %}
+              <div class="row row--space xs muted" style="gap:8px;">
+                <span class="tabular">{{ s.session_type.value }} · {{ s.status.value }}</span>
+                <form method="post" action="{{ url_for('admin.round_refresh_session', round_id=r.id, session_id=s.id) }}" style="margin:0;">
+                  {{ bare_csrf.hidden_tag() }}
+                  <button type="submit" class="btn btn--small btn--secondary">Refresh</button>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
       </div>
     {% endfor %}
   {% endif %}

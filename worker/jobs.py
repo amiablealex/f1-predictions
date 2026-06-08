@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from flask import Flask
+from flask import Flask, current_app
 from sqlalchemy.orm import joinedload
 
 from app.api.exceptions import (
@@ -199,6 +199,47 @@ def _drivers_by_ref(season_driver_refs: set[str]) -> dict[str, Driver]:
     rows = db.session.query(Driver).filter(Driver.driver_ref.in_(season_driver_refs)).all()
     return {d.driver_ref: d for d in rows}
 
+def _race_results_complete(
+    api_results: list,
+    session_obj: Session,
+) -> tuple[bool, str]:
+    """Validate completeness of fetched race-style results before ingest.
+
+    Returns (is_complete, reason). If the session has been pending past
+    the configured grace period, accepts whatever's available so we
+    don't retry indefinitely when upstream data is permanently
+    incomplete.
+
+    Completeness criteria for race / sprint race:
+      - At least one row in results
+      - grid populated on >=80% of rows (allows a couple of DNS/DNQ
+        oddities while still catching the case where the entire grid
+        field is missing)
+      - At least one row flagged as the fastest-lap setter
+
+    Qualifying is not gated here — its data shape is simpler and the
+    late-classification failure mode that motivated this gate doesn't
+    apply to quali results.
+    """
+    grace_hours = current_app.config.get("RESULTS_PENDING_TIMEOUT_HOURS", 6)
+    if session_obj.scheduled_start is not None:
+        elapsed = _utcnow() - session_obj.scheduled_start
+        if elapsed > timedelta(hours=grace_hours):
+            return (True, f"past {grace_hours}h grace period; accepting partial data")
+
+    total = len(api_results)
+    if total == 0:
+        return (False, "no result rows")
+
+    grid_count = sum(1 for r in api_results if r.grid is not None)
+    if grid_count < total * 0.8:
+        return (False, f"grid populated on only {grid_count}/{total} rows")
+
+    fl_count = sum(1 for r in api_results if r.is_fastest_lap)
+    if fl_count == 0:
+        return (False, "no row flagged as fastest-lap setter")
+
+    return (True, "ok")
 
 def results_poll_job(app: Flask, client: JolpicaClient) -> None:
     """For every session in `pending_results`, attempt to fetch and ingest.
@@ -263,6 +304,11 @@ def _fetch_and_ingest_session(client: JolpicaClient, round_obj: Round, session_o
         ingest_qualifying_results(db.session, session_obj, api_results, drivers)
     elif session_obj.session_type == SessionType.RACE:
         api_results = client.get_race_results(season, round_no)
+        complete, reason = _race_results_complete(api_results, session_obj)
+        if not complete:
+            raise JolpicaTransientError(
+                f"race results for round {round_no} incomplete: {reason}"
+            )
         refs = {e.driver_ref for e in api_results}
         drivers = _drivers_by_ref(refs)
         ingest_race_results(db.session, session_obj, api_results, drivers)
@@ -282,6 +328,11 @@ def _fetch_and_ingest_session(client: JolpicaClient, round_obj: Round, session_o
         )
     elif session_obj.session_type == SessionType.SPRINT_RACE:
         api_results = client.get_sprint_race_results(season, round_no)
+        complete, reason = _race_results_complete(api_results, session_obj)
+        if not complete:
+            raise JolpicaTransientError(
+                f"sprint race results for round {round_no} incomplete: {reason}"
+            )
         refs = {e.driver_ref for e in api_results}
         drivers = _drivers_by_ref(refs)
         ingest_race_results(db.session, session_obj, api_results, drivers)
