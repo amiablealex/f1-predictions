@@ -40,7 +40,7 @@ from app.scoring.contributions import (
 )
 from app.utils import (
     contribution_edit_cutoff, contribution_prediction_count, contribution_window_open,
-    contributor_required, round_driver_choices, round_team_choices,
+    contributor_or_admin_required, contributor_required, round_driver_choices, round_team_choices,
 )
 
 contributions_bp = Blueprint("contributions", __name__, template_folder="../templates")
@@ -76,29 +76,60 @@ def _definition_for(round_id: int, contributor_id: int) -> ContributionDefinitio
 
 @contributions_bp.route("/")
 @login_required
-@contributor_required
+@contributor_or_admin_required
 def dashboard():
-    rounds = _season_rounds()
-    defs = {
-        d.round_id: d for d in db.session.query(ContributionDefinition)
-        .filter_by(contributor_id=current_user.id).all()
-    }
     now = _utcnow()
-    rows = []
-    for r in rounds:
-        d = defs.get(r.id)
-        rows.append({
-            "round": r,
-            "definition": d,
-            "is_set": d is not None,
-            "window_open": contribution_window_open(r, now),
-            "is_locked": r.predictions_locked,
-            "has_actual": d.has_actual if d else False,
-            "pred_count": contribution_prediction_count(d.id) if d else 0,
-        })
+    rounds = _season_rounds()
+
+    # ---- This user's own editable rows (only if they're a contributor) ----
+    own_rows = []
+    if current_user.is_contributor:
+        defs = {
+            d.round_id: d for d in db.session.query(ContributionDefinition)
+            .filter_by(contributor_id=current_user.id).all()
+        }
+        for r in rounds:
+            d = defs.get(r.id)
+            own_rows.append({
+                "round": r,
+                "definition": d,
+                "is_set": d is not None,
+                "window_open": contribution_window_open(r, now),
+                "is_locked": r.predictions_locked,
+                "has_actual": d.has_actual if d else False,
+                "pred_count": contribution_prediction_count(d.id) if d else 0,
+            })
+
+    # ---- Admin overview: every contributor's wildcards, read-only ----
+    overview = []
+    if current_user.is_admin:
+        all_defs = (
+            db.session.query(ContributionDefinition)
+            .order_by(ContributionDefinition.round_id.asc(),
+                      ContributionDefinition.created_at.asc())
+            .all()
+        )
+        rounds_by_id = {r.id: r for r in rounds}
+        for d in all_defs:
+            r = rounds_by_id.get(d.round_id)
+            if r is None:
+                continue
+            overview.append({
+                "definition": d,
+                "round": r,
+                "contributor": d.contributor.username,
+                "is_locked": r.predictions_locked,
+                "has_actual": d.has_actual,
+                "pred_count": contribution_prediction_count(d.id),
+            })
+
     return render_template(
         "contributions/dashboard.html",
-        rows=rows, title="Contribute",
+        own_rows=own_rows,
+        overview=overview,
+        is_contributor=current_user.is_contributor,
+        is_admin=current_user.is_admin,
+        title="Contribute",
     )
 
 
@@ -234,19 +265,25 @@ def delete(round_id: int):
 # =============================================================================
 
 
-@contributions_bp.route("/round/<int:round_id>/actual", methods=["GET", "POST"])
+@contributions_bp.route("/actual/<int:definition_id>", methods=["GET", "POST"])
 @login_required
-@contributor_required
-def actual(round_id: int):
-    rd = db.session.get(Round, round_id)
+@contributor_or_admin_required
+def actual(definition_id: int):
+    definition = db.session.get(ContributionDefinition, definition_id)
+    if definition is None:
+        abort(404)
+    rd = db.session.get(Round, definition.round_id)
     if rd is None:
         abort(404)
-    definition = _definition_for(round_id, current_user.id)
-    if definition is None:
-        flash("Set a wildcard for this round first.", "error")
-        return redirect(url_for("contributions.dashboard"))
+
+    # Owner may always act on their own; an admin may act on anyone's. A
+    # non-owner non-admin contributor cannot touch someone else's wildcard.
+    is_owner = definition.contributor_id == current_user.id
+    if not (is_owner or current_user.is_admin):
+        abort(403)
+
     if not rd.predictions_locked:
-        flash("You can enter the actual once predictions lock.", "error")
+        flash("The actual can be entered once predictions lock.", "error")
         return redirect(url_for("contributions.dashboard"))
 
     choices = round_driver_choices(rd)
@@ -256,7 +293,7 @@ def actual(round_id: int):
     if request.method == "POST":
         if not form.validate_on_submit():
             flash("Form expired. Please try again.", "error")
-            return redirect(url_for("contributions.actual", round_id=round_id))
+            return redirect(url_for("contributions.actual", definition_id=definition_id))
         errors = _apply_actual(definition, request.form, choices, team_choices)
         if errors:
             for e in errors:
@@ -265,6 +302,7 @@ def actual(round_id: int):
                 "contributions/actual.html",
                 round_obj=rd, definition=definition, choices=choices,
                 team_choices=team_choices, form=form, title="Submit actual",
+                is_admin_view=(current_user.is_admin and not is_owner),
             )
         definition.actual_set_at = _utcnow()
         definition.actual_set_by_id = current_user.id
@@ -278,6 +316,7 @@ def actual(round_id: int):
         "contributions/actual.html",
         round_obj=rd, definition=definition, choices=choices,
         team_choices=team_choices, form=form, title="Submit actual",
+        is_admin_view=(current_user.is_admin and not is_owner),
     )
 
 

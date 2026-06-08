@@ -5,12 +5,16 @@
 <h2 style="margin-top:0.5rem;">Submit actual result</h2>
 
 <section class="card">
-  <div class="small muted">Your wildcard</div>
+  {% if is_admin_view %}
+    <div class="small muted">{{ definition.contributor.username }}'s wildcard — you're entering this as admin</div>
+  {% else %}
+    <div class="small muted">Your wildcard</div>
+  {% endif %}
   <div style="margin:4px 0;">{{ definition.question_text }}</div>
   <div class="xs muted">{{ definition.scoring_blurb }}</div>
 </section>
 
-<form method="post" action="{{ url_for('contributions.actual', round_id=round_obj.id) }}" class="form">
+<form method="post" action="{{ url_for('contributions.actual', definition_id=definition.id) }}" class="form">
   {{ form.hidden_tag() }}
   <section class="card">
     <div class="field field--prediction">

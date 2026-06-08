@@ -812,6 +812,20 @@ def contributor_required(view):
         return view(*args, **kwargs)
     return wrapped
 
+def contributor_or_admin_required(view):
+    """Require current_user.is_contributor OR is_admin. Used for routes an
+    admin may reach in their oversight capacity (the contributions overview
+    and the actual-submission safety net) without being a contributor."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated or not (
+            current_user.is_contributor or current_user.is_admin
+        ):
+            abort(403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
 # =============================================================================
 # Contribution Helpers
 # =============================================================================
