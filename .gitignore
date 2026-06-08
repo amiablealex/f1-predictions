@@ -17,3 +17,6 @@ instance/
 *.log
 .idea/
 .vscode/
+
+# Database dumps / backups — never commit data
+f1_prod_backup_*.sql
