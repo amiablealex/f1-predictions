@@ -18,8 +18,51 @@
      class="btn btn--small {{ 'btn--primary' if view_kind == 'total' else 'btn--secondary' }}">Total points</a>
   <a href="{{ url_for('leaderboard.view', league_id=league.id, view='h2h') }}"
      class="btn btn--small {{ 'btn--primary' if view_kind == 'h2h' else 'btn--secondary' }}">Head-to-head</a>
+  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='heatmap') }}"
+     class="btn btn--small {{ 'btn--primary' if view_kind == 'heatmap' else 'btn--secondary' }}">Heatmap</a>
 </div>
 
+{% if view_kind == 'heatmap' %}
+  <section class="card heatmap-card">
+    {% if not heatmap or not heatmap.rounds %}
+      <p class="muted" style="padding: 0 var(--space-4);">
+        No completed rounds yet. The heatmap fills in once a round is fully scored.
+      </p>
+    {% else %}
+      <div class="heatmap-scroll">
+        <table class="heatmap">
+          <thead>
+            <tr>
+              <th class="heatmap__corner" scope="col">Player</th>
+              {% for r in heatmap.rounds %}
+                <th class="heatmap__round" scope="col">R{{ r.round_number }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in heatmap.users %}
+              <tr>
+                <th class="heatmap__name{% if u.is_self %} heatmap__name--self{% endif %}" scope="row">
+                  {{ u.username }}{% if u.is_self %} <span class="small muted">(you)</span>{% endif %}
+                </th>
+                {% for c in u.cells %}
+                  {% set rnd = heatmap.rounds[loop.index0] %}
+                  {% if c is none %}
+                    <td class="heatmap__cell heatmap__cell--empty"
+                        title="{{ u.username }} · R{{ rnd.round_number }}: no entry">—</td>
+                  {% else %}
+                    <td class="heatmap__cell heatmap__cell--{{ c | heatmap_band }}"
+                        title="{{ u.username }} · R{{ rnd.round_number }}: {{ c }}">{{ c }}</td>
+                  {% endif %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+{% else %}
 <section class="card">
   {% if not rows %}
     <p class="muted">No scores yet. The leaderboard fills in as phases reveal.</p>
@@ -74,6 +117,7 @@
 <p class="small muted">
   Tap a name to see their season, or a last score to jump to that round.
 </p>
+{% endif %}
 
 <div class="maker-mark" style="margin-top: var(--space-6);">
   <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">

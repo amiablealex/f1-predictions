@@ -140,6 +140,7 @@ def _register_jinja_helpers(app: Flask) -> None:
         deadline_phrase,
         driver_label,
         format_pole_time_ms,
+        heatmap_band,
         local_time,
         points_class,
         session_status_class,
@@ -148,9 +149,13 @@ def _register_jinja_helpers(app: Flask) -> None:
 
     @app.context_processor
     def inject_palette():
-        return {"palette": app.config["PALETTE"]}
+        return {
+            "palette": app.config["PALETTE"],
+            "heatmap_colors": app.config["HEATMAP_COLORS"],
+        }
 
     app.jinja_env.filters["points_class"] = points_class
+    app.jinja_env.filters["heatmap_band"] = heatmap_band
     app.jinja_env.filters["deadline_phrase"] = deadline_phrase
     app.jinja_env.filters["session_status_class"] = session_status_class
     app.jinja_env.filters["session_status_label"] = session_status_label

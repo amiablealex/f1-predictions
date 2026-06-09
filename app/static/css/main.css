@@ -1006,3 +1006,82 @@ p { margin: 0 0 var(--space-3) 0; }
   gap: 4px;
 }
 
+/* --------------------------------------------- Leaderboard heatmap */
+/* Horizontally scrolling users×rounds score matrix. The Player column is
+   frozen; round columns scroll off to the right as the season builds. */
+
+.heatmap-card {
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+.heatmap-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--space-4);
+}
+.heatmap {
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.heatmap th,
+.heatmap td { padding: 0; }
+
+.heatmap__corner,
+.heatmap__round {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  font-weight: 600;
+  padding-bottom: 6px;
+}
+.heatmap__round {
+  min-width: 44px;
+  text-align: center;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.heatmap__corner {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--c-surface);
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 500;
+  padding-right: var(--space-3);
+  box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
+}
+
+.heatmap__name {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--c-surface);
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 0 var(--space-3) 0 2px;
+  box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
+}
+.heatmap__name--self {
+  background: var(--c-surface-alt);
+  border-radius: var(--radius-sm);
+}
+
+.heatmap__cell {
+  height: 40px;
+  min-width: 44px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+.heatmap__cell--empty {
+  background: transparent;
+  color: var(--c-points-0);
+}
+.heatmap__cell--very-low  { background: var(--heat-very-low-bg);  color: var(--heat-very-low-fg); }
+.heatmap__cell--low       { background: var(--heat-low-bg);       color: var(--heat-low-fg); }
+.heatmap__cell--medium    { background: var(--heat-medium-bg);    color: var(--heat-medium-fg); }
+.heatmap__cell--high      { background: var(--heat-high-bg);      color: var(--heat-high-fg); }
+.heatmap__cell--very-high { background: var(--heat-very-high-bg); color: var(--heat-very-high-fg); }

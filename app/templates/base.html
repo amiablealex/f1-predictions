@@ -48,6 +48,10 @@
       --c-status-in-progress: {{ palette.status_in_progress }};
       --c-status-pending:     {{ palette.status_pending }};
       --c-status-completed:   {{ palette.status_completed }};
+      {% for band, c in heatmap_colors.items() %}
+      --heat-{{ band }}-bg: {{ c.bg }};
+      --heat-{{ band }}-fg: {{ c.fg }};
+      {% endfor %}
     }
   </style>
   {% block head_extra %}{% endblock %}

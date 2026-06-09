@@ -194,6 +194,30 @@ class Config:
         "status_completed": "#4f6b3a",
     }
 
+    # -------------------------------------------------------------------------
+    # Heatmap (leaderboard "Heatmap" view).
+    # Bands are checked top to bottom; the first whose threshold the round
+    # score meets wins. A threshold of None is the catch-all for everything
+    # below the lowest band (covers 0 and any negative). Colours are a single-
+    # hue moss ramp on the parchment palette: light = low, deep = high. Each
+    # band sets a cell background (bg) and text colour (fg).
+    # -------------------------------------------------------------------------
+    HEATMAP_THRESHOLDS = [
+        (80, "very-high"),
+        (60, "high"),
+        (45, "medium"),
+        (30, "low"),
+        (None, "very-low"),
+    ]
+    HEATMAP_COLORS = {
+        "very-low":  {"bg": "#e4e6cd", "fg": "#4a4f38"},
+        "low":       {"bg": "#cdd6a6", "fg": "#3f4a2c"},
+        "medium":    {"bg": "#a9bb7e", "fg": "#33401f"},
+        "high":      {"bg": "#7d9a55", "fg": "#f3ecd9"},
+        "very-high": {"bg": "#4f6b3a", "fg": "#f3ecd9"},
+    }
+
+
     # Hard cap on items per leaderboard page (small group app, not paginated heavily)
     LEADERBOARD_PAGE_SIZE = 100
 

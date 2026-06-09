@@ -53,7 +53,7 @@ def index():
 def view(league_id: int):
     league = assert_member(current_user.id, league_id)
     view_kind = request.args.get("view", "total")
-    if view_kind not in ("total", "h2h"):
+    if view_kind not in ("total", "h2h", "heatmap"):
         view_kind = "total"
 
     member_ids = _league_member_ids(league_id)
@@ -61,7 +61,11 @@ def view(league_id: int):
 
     last_scored = _most_recent_scored_round()
 
-    if view_kind == "h2h":
+    rows: list[LeaderboardRow] = []
+    heatmap = None
+    if view_kind == "heatmap":
+        heatmap = _build_heatmap(members_by_id)
+    elif view_kind == "h2h":
         rows = _build_h2h_rows(league_id, members_by_id, last_scored)
     else:
         rows = _build_total_rows(league_id, members_by_id, last_scored)
@@ -72,6 +76,7 @@ def view(league_id: int):
         leagues=user_leagues(current_user.id),
         view_kind=view_kind,
         rows=rows,
+        heatmap=heatmap,
         friend_landing=most_recent_visible_round(current_app.config["F1_SEASON"]),
         last_scored=last_scored,
         title=f"{league.name} · Leaderboard",
@@ -203,6 +208,70 @@ def _build_h2h_rows(
     triples = [(uid, h2h_total[uid], h2h_last[uid]) for uid in member_ids]
     triples.sort(key=lambda p: (-p[1], -p[2], members_by_id[p[0]].username.lower()))
     return _rank(triples, members_by_id)
+
+
+def _build_heatmap(members_by_id: dict[int, User]) -> dict:
+    """Users×rounds score matrix for the heatmap view.
+
+    Columns are every COMPLETED round, ascending. A cell is the user's total
+    points for that round, or None when they submitted nothing (no
+    PredictionScore rows) — distinguishing a genuine 0 from a non-entry.
+    Rows are ordered by the sum of displayed scores, descending.
+    """
+    member_ids = list(members_by_id.keys())
+
+    completed = (
+        db.session.query(Round)
+        .filter(Round.state == RoundState.COMPLETED)
+        .order_by(Round.round_number.asc())
+        .all()
+    )
+    if not member_ids or not completed:
+        return {"rounds": completed, "users": []}
+
+    round_ids = [r.id for r in completed]
+
+    # Per (user, round): summed points + row count. count > 0 ⇒ participated,
+    # so a real 0 shows as "0" rather than a dash.
+    cell: dict[tuple[int, int], tuple[int, int]] = {}
+    for uid, rid, pts, cnt in (
+        db.session.query(
+            PredictionScore.user_id,
+            PredictionScore.round_id,
+            func.coalesce(func.sum(PredictionScore.points), 0),
+            func.count(PredictionScore.id),
+        )
+        .filter(
+            PredictionScore.user_id.in_(member_ids),
+            PredictionScore.round_id.in_(round_ids),
+        )
+        .group_by(PredictionScore.user_id, PredictionScore.round_id)
+        .all()
+    ):
+        cell[(uid, rid)] = (int(pts), int(cnt))
+
+    totals: dict[int, int] = defaultdict(int)
+    for (uid, _rid), (pts, _cnt) in cell.items():
+        totals[uid] += pts
+
+    ordered = sorted(
+        members_by_id.values(),
+        key=lambda u: (-totals.get(u.id, 0), u.username.lower()),
+    )
+
+    users = []
+    for u in ordered:
+        cells = []
+        for rid in round_ids:
+            c = cell.get((u.id, rid))
+            cells.append(None if c is None or c[1] == 0 else c[0])
+        users.append({
+            "username": u.username,
+            "is_self": u.id == current_user.id,
+            "cells": cells,
+        })
+
+    return {"rounds": completed, "users": users}
 
 
 def _rank(

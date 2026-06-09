@@ -869,3 +869,14 @@ def contribution_prediction_count(contribution_id: int) -> int:
         .filter_by(contribution_id=contribution_id)
         .count()
     )
+
+def heatmap_band(points: int) -> str:
+    """Map a round score to a heatmap band name (config-driven).
+
+    Bands are checked top to bottom; the first whose threshold is met wins.
+    A threshold of None is the catch-all, covering 0 and any negative."""
+    from flask import current_app
+    for threshold, band in current_app.config["HEATMAP_THRESHOLDS"]:
+        if threshold is None or points >= threshold:
+            return band
+    return current_app.config["HEATMAP_THRESHOLDS"][-1][1]
