@@ -66,17 +66,20 @@
 
         {% set refreshable = r.sessions | selectattr('status.value', 'in', ('completed', 'pending_results')) | list %}
         {% if refreshable %}
-          <div style="margin-top:6px;padding-left:12px;display:flex;flex-direction:column;gap:4px;">
-            {% for s in refreshable %}
-              <div class="row row--space xs muted" style="gap:8px;">
-                <span class="tabular">{{ s.session_type.value }} · {{ s.status.value }}</span>
-                <form method="post" action="{{ url_for('admin.round_refresh_session', round_id=r.id, session_id=s.id) }}" style="margin:0;">
-                  {{ bare_csrf.hidden_tag() }}
-                  <button type="submit" class="btn btn--small btn--secondary">Refresh</button>
-                </form>
-              </div>
-            {% endfor %}
-          </div>
+          <details class="admin-sessions">
+            <summary class="admin-sessions__summary">Sessions ({{ refreshable|length }})</summary>
+            <div class="admin-sessions__body">
+              {% for s in refreshable %}
+                <div class="row row--space xs muted" style="gap:8px;">
+                  <span class="tabular">{{ s.session_type.value }} · {{ s.status.value }}</span>
+                  <form method="post" action="{{ url_for('admin.round_refresh_session', round_id=r.id, session_id=s.id) }}" style="margin:0;">
+                    {{ bare_csrf.hidden_tag() }}
+                    <button type="submit" class="btn btn--small btn--secondary">Refresh</button>
+                  </form>
+                </div>
+              {% endfor %}
+            </div>
+          </details>
         {% endif %}
       </div>
     {% endfor %}
@@ -86,21 +89,30 @@
 <section class="card">
   <h3>Users ({{ users|length }})</h3>
   {% for u in users %}
-    <div class="row row--space" style="padding:6px 0;border-bottom:1px solid var(--c-border);">
-      <div>
-        <div>{{ u.username }}</div>
-        <div class="small muted">{{ u.email }}{% if u.is_admin %} · admin{% endif %}{% if u.is_contributor %} · contributor{% endif %}</div>
+    <div class="admin-user-row">
+      <div class="admin-user-row__main">
+        <div class="admin-user-row__name">
+          {{ u.username }}
+          <button type="button" class="tooltip-trigger"
+                  aria-label="Show email" aria-expanded="false"
+                  data-tooltip="{{ u.email }}">i</button>
+        </div>
+        <div class="admin-user-row__tags">
+          {% if u.is_admin %}<span class="pill pill--status-completed">admin</span>{% endif %}
+          {% if u.is_contributor %}<span class="pill pill--status-pending">contributor</span>{% endif %}
+        </div>
       </div>
-      <div class="row" style="gap:4px;">
+      <div class="admin-user-row__actions">
         <form method="post" action="{{ url_for('admin.user_contributor_toggle', user_id=u.id) }}" style="margin:0;">
           {{ bare_csrf.hidden_tag() }}
-          <button type="submit" class="btn btn--small btn--secondary">
-            {{ 'Revoke contributor' if u.is_contributor else 'Make contributor' }}
+          <button type="submit"
+                  class="btn btn--small admin-toggle {{ 'btn--primary' if u.is_contributor else 'btn--secondary' }}">
+            Contributor
           </button>
         </form>
         <form method="post" action="{{ url_for('admin.issue_password_reset', user_id=u.id) }}" style="margin:0;">
           {{ bare_csrf.hidden_tag() }}
-          <button type="submit" class="btn btn--small btn--secondary">Issue reset</button>
+          <button type="submit" class="btn btn--small btn--secondary admin-reset">Reset</button>
         </form>
       </div>
     </div>

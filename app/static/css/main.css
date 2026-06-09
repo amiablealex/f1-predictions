@@ -937,3 +937,72 @@ p { margin: 0 0 var(--space-3) 0; }
   border-right: 5px solid transparent;
   border-bottom: 5px solid var(--c-ink);
 }
+
+/* --------------------------------------------- Admin: users list */
+
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.admin-user-row:last-child { border-bottom: none; }
+.admin-user-row__main { min-width: 0; }
+.admin-user-row__name {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+.admin-user-row__tags {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: 3px;
+  min-height: 0;
+}
+.admin-user-row__actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+/* Fixed widths so the button column is a straight edge across all rows,
+   regardless of toggle state. */
+.btn.admin-toggle { min-width: 92px; }
+.btn.admin-reset  { min-width: 60px; }
+
+/* --------------------------------------------- Admin: collapsible sessions */
+
+.admin-sessions {
+  margin-top: var(--space-2);
+}
+.admin-sessions__summary {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  cursor: pointer;
+  list-style: none;            /* hide default marker, add our own */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.admin-sessions__summary::-webkit-details-marker { display: none; }
+.admin-sessions__summary::before {
+  content: "▸";
+  font-size: 0.8em;
+  transition: transform 120ms ease;
+}
+.admin-sessions[open] .admin-sessions__summary::before {
+  transform: rotate(90deg);
+}
+.admin-sessions__body {
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
