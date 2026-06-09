@@ -22,6 +22,7 @@ DECIMAL = "decimal"
 LAP_TIME = "lap_time"
 BOOL = "bool"
 CUSTOM_CHOICE = "custom_choice"
+POINTS_LIMIT = 25  # |points| ceiling for primary and secondary, per wildcard.
 
 INPUT_TYPES = (DRIVER_PICK, TEAM_PICK, INTEGER, DECIMAL, LAP_TIME, BOOL, CUSTOM_CHOICE)
 
@@ -91,6 +92,8 @@ def validate_definition(
         return ["Unknown input type."], warnings
     if primary_points is None:
         errors.append("Primary points are required.")
+    elif abs(primary_points) > POINTS_LIMIT:
+        errors.append(f"Primary points must be between -{POINTS_LIMIT} and {POINTS_LIMIT}.")
 
     if input_type in DISCRETE_TYPES:
         if primary_mode != "exact":
@@ -114,6 +117,8 @@ def validate_definition(
             errors.append("Primary scoring must be 'exact' or 'numerical range'.")
 
         if secondary_points is not None:
+            if abs(secondary_points) > POINTS_LIMIT:
+                errors.append(f"Secondary points must be between -{POINTS_LIMIT} and {POINTS_LIMIT}.")
             sr = _to_decimal(secondary_range)
             if sr is None or sr <= 0:
                 errors.append("A secondary tier needs a range value greater than 0.")
