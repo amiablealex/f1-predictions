@@ -1028,16 +1028,19 @@ p { margin: 0 0 var(--space-3) 0; }
 .heatmap th,
 .heatmap td { padding: 0; }
 
+
 .heatmap__corner,
 .heatmap__round {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   color: var(--c-ink-muted);
-  font-weight: 400;
+  font-weight: 600;
   padding-bottom: 6px;
 }
 .heatmap__round {
   min-width: 44px;
   text-align: center;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .heatmap__corner {
   position: sticky;
@@ -1059,7 +1062,7 @@ p { margin: 0 0 var(--space-3) 0; }
   text-align: left;
   font-weight: 400;
   white-space: nowrap;
-  padding: 0 var(--space-5) 0 2px;
+  padding: 0 var(--space-3) 0 2px;
   box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
 }
 .heatmap__name--self {
@@ -1068,7 +1071,7 @@ p { margin: 0 0 var(--space-3) 0; }
 }
 
 .heatmap__cell {
-  height: 34px;
+  height: 40px;
   min-width: 44px;
   text-align: center;
   border-radius: var(--radius-sm);
