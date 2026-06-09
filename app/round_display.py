@@ -125,6 +125,12 @@ def actual_places_gained_for_pick(
 ) -> ActualDisplay | None:
     """Picked driver's grid → finish for places gained.
 
+    For DNFs, the cell shows 'P{grid} → DNF' while the scoring engine
+    uses the underlying Jolpica position (grid - actual_position). The
+    text representation deliberately doesn't expose the DNF-ranked
+    position to keep the cell readable — the points pill alongside
+    tells the user how it scored.
+
     Never sets is_exact — places gained is continuous.
     """
     if race_session is None or not race_session.results:

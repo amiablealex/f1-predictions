@@ -339,14 +339,26 @@ def score_places_gained(
     race_results: list[SessionResult],
     round_drivers: list[RoundDriver],
 ) -> int:
-    """Award (grid - finish), uncapped. Rules:
+    """Award (grid - finish_position), uncapped.
 
-      - Classified finish → grid - finish.
-      - DNF / DSQ / unclassified → grid - (last_classified + 1).
-      - DNS or never raced → 0 points (driver never had a chance).
+    Uses Jolpica's assigned position regardless of finish status:
+      - Classified finish → straight grid - finish.
+      - DNF / DSQ / unclassified → grid - assigned_position. F1 ranks
+        DNFs by laps completed (late-DNF outranks early-DNF), so a
+        driver who got further into the race scores better than one
+        who retired sooner. Front-runners who retire early get hit
+        hardest; back-markers who retire late may score slightly
+        positive. Accepted as the price of capturing completion.
+
+    Edge cases:
+      - DNS or never raced → 0 (driver never had a chance to gain or
+        lose places). Detected via status string.
+      - Driver not in this round's lineup → 0.
+      - No result row for the car → 0 (effectively a DNS).
       - Pit lane start (grid 0) → treated as the last grid slot
         (= total race entries).
-      - No grid_position recorded → 0 (defensive; should be populated).
+      - No grid_position recorded → 0 (defensive; the ingestion gate
+        ensures this doesn't happen in practice).
     """
     car = _car_number_for_predicted_driver(predicted_driver_id, round_drivers)
     if car is None:
@@ -361,18 +373,7 @@ def score_places_gained(
 
     total_starters = len(race_results)
     grid = actual.grid_position if actual.grid_position != 0 else total_starters
-
-    if actual.is_classified:
-        return grid - actual.position
-
-    classified_positions = [r.position for r in race_results if r.is_classified]
-    if classified_positions:
-        treated_finish = max(classified_positions) + 1
-    else:
-        # Bizarre edge case: no classified finishers (race red-flagged
-        # before half-distance). Use the field size as the floor.
-        treated_finish = total_starters
-    return grid - treated_finish
+    return grid - actual.position
 
 
 # =============================================================================
