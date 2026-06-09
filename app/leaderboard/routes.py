@@ -260,12 +260,19 @@ def _build_heatmap(members_by_id: dict[int, User]) -> dict:
     )
 
     users = []
+    rank = 0
+    last_total: int | None = None
     for u in ordered:
+        u_total = totals.get(u.id, 0)
+        if u_total != last_total:
+            rank += 1
+            last_total = u_total
         cells = []
         for rid in round_ids:
             c = cell.get((u.id, rid))
             cells.append(None if c is None or c[1] == 0 else c[0])
         users.append({
+            "rank": rank,
             "username": u.username,
             "is_self": u.id == current_user.id,
             "cells": cells,

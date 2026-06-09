@@ -33,7 +33,7 @@
         <table class="heatmap">
           <thead>
             <tr>
-              <th class="heatmap__corner" scope="col">Player</th>
+              <th class="heatmap__corner" scope="col"></th>
               {% for r in heatmap.rounds %}
                 <th class="heatmap__round" scope="col">R{{ r.round_number }}</th>
               {% endfor %}
@@ -43,7 +43,15 @@
             {% for u in heatmap.users %}
               <tr>
                 <th class="heatmap__name{% if u.is_self %} heatmap__name--self{% endif %}" scope="row">
-                  {{ u.username }}{% if u.is_self %} <span class="small muted">(you)</span>{% endif %}
+                  <span class="row" style="gap:12px;">
+                    <span class="muted small tabular" style="min-width:1.5em;">{{ u.rank }}</span>
+                    {% if u.is_self %}
+                      <span>{{ u.username }} <span class="small muted">(you)</span></span>
+                    {% else %}
+                      <a href="{{ url_for('rounds.list_friend', username=u.username) }}"
+                         class="leaderboard-row__link">{{ u.username }}</a>
+                    {% endif %}
+                  </span>
                 </th>
                 {% for c in u.cells %}
                   {% set rnd = heatmap.rounds[loop.index0] %}
