@@ -1,6 +1,36 @@
 {% extends "base.html" %}
 {% from "_macros.html" import round_header %}
 {% block content %}
+
+<style>
+  /* Wildcard scoring fields: inline label+input, note tucked underneath,
+     clear gap before the next field. Scoped to this template. */
+  .wc-field { margin-bottom: 1.1rem; }
+  .wc-field__row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .wc-field__row .field__label {
+    flex: 0 0 auto;
+    min-width: 9.5rem;      /* keeps labels on one line and inputs aligned */
+    margin: 0;
+    white-space: nowrap;
+  }
+  .wc-field__row .field__input,
+  .wc-field__row .field__select {
+    flex: 1 1 auto;
+    margin: 0;
+  }
+  .wc-field__note {
+    display: block;
+    margin-top: 0.3rem;     /* tight to the input above — clearly its note */
+  }
+  /* The one full-width field: label above, input below. */
+  .wc-field--stacked .field__label { display: block; margin-bottom: 0.4rem; }
+  .wc-field--stacked .field__input { width: 100%; }
+</style>
+
 {{ round_header(round_obj) }}
 <h2 style="margin-top:0.5rem;">{{ 'Edit' if definition else 'New' }} wildcard</h2>
 
@@ -92,54 +122,64 @@
     </div>
   </section>
 
-  <section class="card">
-    <h4 class="card__subheader">Scoring</h4>
+<section class="card">
+    <h3>Scoring</h3>
 
-    <div class="field field--inline">
-      <label class="field__label">Primary points</label>
-      <input type="number" name="primary_points" class="field__input" step="1"
-             value="{% if ex is not none %}{{ ex.get('primary_points','') }}{% elif definition %}{{ definition.primary_points }}{% endif %}"
-             autocomplete="off" required>
+    <div class="wc-field">
+      <div class="wc-field__row">
+        <label class="field__label">Primary points</label>
+        <input type="number" name="primary_points" class="field__input" step="1"
+               value="{% if ex is not none %}{{ ex.get('primary_points','') }}{% elif definition %}{{ definition.primary_points }}{% endif %}"
+               autocomplete="off" required>
+      </div>
     </div>
 
-    <div class="field" data-numeric-only>
-      <label class="field__label">Primary scoring</label>
-      <select name="primary_mode" id="primary_mode" class="field__select">
-        {% set pm = (ex.get('primary_mode') if ex is not none else (definition.primary_mode if definition else 'exact')) %}
-        <option value="exact" {% if pm == 'exact' %}selected{% endif %}>Exact only</option>
-        <option value="range" {% if pm == 'range' %}selected{% endif %}>Numerical range (±)</option>
-      </select>
+    <div class="wc-field" data-numeric-only>
+      <div class="wc-field__row">
+        <label class="field__label">Primary scoring</label>
+        <select name="primary_mode" id="primary_mode" class="field__select">
+          {% set pm = (ex.get('primary_mode') if ex is not none else (definition.primary_mode if definition else 'exact')) %}
+          <option value="exact" {% if pm == 'exact' %}selected{% endif %}>Exact only</option>
+          <option value="range" {% if pm == 'range' %}selected{% endif %}>Numerical range (±)</option>
+        </select>
+      </div>
     </div>
 
-    <div class="field" data-numeric-only data-when-mode="range">
-      <label class="field__label">Primary range (±)</label>
-      <small class="muted">e.g. 3 means within 3 of the actual scores the primary points. For lap times, in seconds (e.g. 0.5).</small>
-      <input type="text" name="primary_range" class="field__input" inputmode="decimal"
-             value="{% if ex is not none %}{{ ex.get('primary_range','') }}{% elif definition and definition.primary_range is not none %}{{ definition.primary_range }}{% endif %}"
-             autocomplete="off">
+    <div class="wc-field" data-numeric-only data-when-mode="range">
+      <div class="wc-field__row">
+        <label class="field__label">Primary range (±)</label>
+        <input type="text" name="primary_range" class="field__input" inputmode="decimal"
+               value="{% if ex is not none %}{{ ex.get('primary_range','') }}{% elif definition and definition.primary_range is not none %}{{ definition.primary_range }}{% endif %}"
+               autocomplete="off">
+      </div>
+      <small class="wc-field__note muted">e.g. 3 means within 3 of the actual scores the primary points. For lap times, in seconds (e.g. 0.5).</small>
     </div>
 
-    <div class="field" data-numeric-only>
-      <label class="field__label">Secondary points (optional)</label>
-      <small class="muted">A lower consolation tier. Must be lower than primary, on a wider range. Leave blank for none.</small>
-      <input type="number" name="secondary_points" id="secondary_points" class="field__input" step="1"
-             value="{% if ex is not none %}{{ ex.get('secondary_points','') }}{% elif definition and definition.secondary_points is not none %}{{ definition.secondary_points }}{% endif %}"
-             autocomplete="off">
+    <div class="wc-field" data-numeric-only>
+      <div class="wc-field__row">
+        <label class="field__label">Secondary points (optional)</label>
+        <input type="number" name="secondary_points" id="secondary_points" class="field__input" step="1"
+               value="{% if ex is not none %}{{ ex.get('secondary_points','') }}{% elif definition and definition.secondary_points is not none %}{{ definition.secondary_points }}{% endif %}"
+               autocomplete="off">
+      </div>
+      <small class="wc-field__note muted">A lower consolation tier. Must be lower than primary, on a wider range. Leave blank for none.</small>
     </div>
 
-    <div class="field" data-numeric-only data-when-secondary>
-      <label class="field__label">Secondary range (±)</label>
-      <input type="text" name="secondary_range" class="field__input" inputmode="decimal"
-             value="{% if ex is not none %}{{ ex.get('secondary_range','') }}{% elif definition and definition.secondary_range is not none %}{{ definition.secondary_range }}{% endif %}"
-             autocomplete="off">
+    <div class="wc-field" data-numeric-only data-when-secondary>
+      <div class="wc-field__row">
+        <label class="field__label">Secondary range (±)</label>
+        <input type="text" name="secondary_range" class="field__input" inputmode="decimal"
+               value="{% if ex is not none %}{{ ex.get('secondary_range','') }}{% elif definition and definition.secondary_range is not none %}{{ definition.secondary_range }}{% endif %}"
+               autocomplete="off">
+      </div>
     </div>
 
-    <div class="field">
+    <div class="wc-field wc-field--stacked">
       <label class="field__label">Scoring note (shown under the question)</label>
-      <small class="muted">Leave blank to auto-generate from the values above. Mirrors the "within 5 laps…" style on existing predictions.</small>
       <input type="text" name="scoring_blurb" class="field__input" maxlength="200"
              value="{% if ex is not none %}{{ ex.get('scoring_blurb','') }}{% elif definition %}{{ definition.scoring_blurb }}{% endif %}"
              autocomplete="off">
+      <small class="wc-field__note muted">Leave blank to auto-generate from the values above. Mirrors the "within 5 laps…" style on existing predictions.</small>
     </div>
   </section>
 
