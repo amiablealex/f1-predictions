@@ -20,3 +20,4 @@ instance/
 
 # Database dumps / backups — never commit data
 f1_prod_backup_*.sql
+scripts/.edit_state.json
