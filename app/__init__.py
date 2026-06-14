@@ -144,6 +144,7 @@ def _register_jinja_helpers(app: Flask) -> None:
         local_time,
         points_class,
         session_status_class,
+        session_status_detail,
         session_status_label,
     )
 
@@ -159,6 +160,7 @@ def _register_jinja_helpers(app: Flask) -> None:
     app.jinja_env.filters["deadline_phrase"] = deadline_phrase
     app.jinja_env.filters["session_status_class"] = session_status_class
     app.jinja_env.filters["session_status_label"] = session_status_label
+    app.jinja_env.filters["session_status_detail"] = session_status_detail
     app.jinja_env.filters["pole_time"] = format_pole_time_ms
     app.jinja_env.filters["country_flag"] = country_flag
     app.jinja_env.filters["driver_label"] = driver_label

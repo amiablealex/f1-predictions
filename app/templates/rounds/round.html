@@ -100,7 +100,7 @@
     {% set sr = sessions.get(SESSION_SPRINT_RACE) %}
     <div class="row">
       <span class="{{ (sr.status if sr else None)|session_status_class }}">
-        {{ (sr.status if sr else None)|session_status_label }}
+        {{ sr|session_status_detail }}
       </span>
       {{ phase_score_pill(state.sprint_points) }}
     </div>
@@ -136,7 +136,7 @@
     {% set quali = sessions.get(SESSION_QUALI) %}
     <div class="row">
       <span class="{{ (quali.status if quali else None)|session_status_class }}">
-        {{ (quali.status if quali else None)|session_status_label }}
+        {{ quali|session_status_detail }}
       </span>
       {{ phase_score_pill(state.quali_points) }}
     </div>
@@ -231,7 +231,7 @@
     {% set race = sessions.get(SESSION_RACE) %}
     <div class="row">
       <span class="{{ (race.status if race else None)|session_status_class }}">
-        {{ (race.status if race else None)|session_status_label }}
+        {{ race|session_status_detail }}
       </span>
       {{ phase_score_pill(state.race_points) }}
     </div>
