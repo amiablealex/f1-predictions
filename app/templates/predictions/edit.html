@@ -2,6 +2,20 @@
 {% from "_macros.html" import round_header, driver_select %}
 
 {% block content %}
+<style>
+  .tz-note {
+    text-align: right;
+    margin-top: -0.25rem;      /* pull up slightly toward the deadline line */
+    margin-bottom: var(--space-3);
+    padding-right: var(--space-1);  /* nudge off the right edge, aligning with pills */
+    font-style: italic;
+    opacity: 0.75;
+  }
+.deadline-emphasis {
+    color: var(--c-accent);
+    font-weight: 600;
+  }
+</style>
 {{ round_header(round_obj) }}
 
 {% if active_round %}
@@ -13,11 +27,13 @@
 {% endif %}
 
 <p class="muted small">
-  Locks <strong>{{ round_obj.predictions_deadline|local_time }}</strong>
+  Locks <strong class="deadline-emphasis">{{ round_obj.predictions_deadline|local_time }}</strong>
   <span data-countdown="{{ round_obj.predictions_deadline.isoformat() }}"
         class="countdown"></span>
   · Whatever's saved at that point is what gets scored.
 </p>
+
+<p class="tz-note xs muted">Times shown in UK time (BST/GMT)</p>
 
 <form method="post" action="{{ url_for('predictions.submit') }}" class="form predictions-form">
   {{ form.hidden_tag() }}

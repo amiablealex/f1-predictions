@@ -742,7 +742,7 @@ def format_session_time(session: Session | None) -> str:
     local = start.astimezone(tz)
     now_local = datetime.now(timezone.utc).astimezone(tz)
     fmt = "%H:%M" if local.date() == now_local.date() else "%a %H:%M"
-    return local.strftime(fmt)
+    return local.strftime(f"{fmt} %Z")
 
 
 def local_time(dt: datetime | None, fmt: str = "%a %d %b %H:%M") -> str:
@@ -757,7 +757,7 @@ def local_time(dt: datetime | None, fmt: str = "%a %d %b %H:%M") -> str:
     tz = current_app.config["TIMEZONE"]
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(tz).strftime(fmt)
+    return dt.astimezone(tz).strftime(f"{fmt} %Z")
 
 
 def deadline_phrase(dt: datetime | None, threshold_hours: int = 24) -> str:
