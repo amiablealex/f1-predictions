@@ -24,7 +24,13 @@
 
   {% if is_sprint %}
     <section class="card">
-      <h3>Sprint Race — Top 3</h3>
+      <div class="row row--space">
+        <h3>Sprint Race — Top 3</h3>
+        {% set st = sessions_by_type.get(SESSION_SPRINT_RACE) %}
+        {% if st and st|session_time %}
+          <span class="pill pill--status-upcoming">{{ st|session_time }}</span>
+        {% endif %}
+      </div>
       {% for pos in [1, 2, 3] %}
         <div class="field field--inline field--prediction">
           <label class="field__label">P{{ pos }}</label>
@@ -35,7 +41,13 @@
   {% endif %}
 
   <section class="card">
-    <h3>Qualifying</h3>
+    <div class="row row--space">
+      <h3>Qualifying</h3>
+      {% set sq = sessions_by_type.get(SESSION_QUALI) %}
+      {% if sq and sq|session_time %}
+        <span class="pill pill--status-upcoming">{{ sq|session_time }}</span>
+      {% endif %}
+    </div>
     <div class="field field--prediction">
       <label class="field__label">Pole lap time (e.g. 1:23.456)</label>
       <input type="text" name="pole_time" class="field__input"
@@ -89,7 +101,13 @@
   </section>
 
   <section class="card">
-    <h3>Race — Top 10</h3>
+    <div class="row row--space">
+      <h3>Race — Top 10</h3>
+      {% set sr = sessions_by_type.get(SESSION_RACE) %}
+      {% if sr and sr|session_time %}
+        <span class="pill pill--status-upcoming">{{ sr|session_time }}</span>
+      {% endif %}
+    </div>
     {% for pos in range(1, 11) %}
       <div class="field field--inline field--prediction">
         <label class="field__label">P{{ pos }}</label>

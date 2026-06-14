@@ -92,9 +92,12 @@ def edit():
     existing = _load_draft(rd.id, current_user.id)
     form = FlaskForm()  # CSRF only
 
+    sessions_by_type = {s.session_type: s for s in rd.sessions}
+
     return render_template(
         "predictions/edit.html",
         round_obj=rd,
+        sessions_by_type=sessions_by_type,
         choices=choices,
         team_choices=round_team_choices(rd),
         existing=existing,
@@ -150,9 +153,11 @@ def submit():
     if errors:
         for e in errors:
             flash(e, "error")
+        sessions_by_type = {s.session_type: s for s in rd.sessions}
         return render_template(
             "predictions/edit.html",
             round_obj=rd,
+            sessions_by_type=sessions_by_type,
             choices=choices,
             team_choices=round_team_choices(rd),
             existing=request.form.to_dict(),

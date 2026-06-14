@@ -722,16 +722,18 @@ def session_status_label(status: SessionStatus | None) -> str:
 
 
 def session_status_detail(session: Session | None) -> str:
-    """Status label, with the start time appended for upcoming sessions.
-
-    'scheduled 15:00' (today) or 'scheduled Sun 15:00' (other day). For
-    non-upcoming statuses, falls back to the plain label.
-    """
     if session is None:
         return session_status_label(None)
     if session.status != SessionStatus.UPCOMING or session.scheduled_start is None:
         return session_status_label(session.status)
+    return f"scheduled {format_session_time(session)}"
 
+
+def format_session_time(session: Session | None) -> str:
+    """Compact local start time for a session: '15:00' if today, 'Sat 15:00'
+    otherwise. Empty string if no session or no start time."""
+    if session is None or session.scheduled_start is None:
+        return ""
     from flask import current_app
     tz = current_app.config["TIMEZONE"]
     start = session.scheduled_start
@@ -740,7 +742,7 @@ def session_status_detail(session: Session | None) -> str:
     local = start.astimezone(tz)
     now_local = datetime.now(timezone.utc).astimezone(tz)
     fmt = "%H:%M" if local.date() == now_local.date() else "%a %H:%M"
-    return f"scheduled {local.strftime(fmt)}"
+    return local.strftime(fmt)
 
 
 def local_time(dt: datetime | None, fmt: str = "%a %d %b %H:%M") -> str:
