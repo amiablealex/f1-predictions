@@ -1,21 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import round_header %}
 {% block content %}
-<h1>{{ league.name }}</h1>
-
-{% if leagues|length > 1 %}
-  <div class="card" style="padding:8px 12px;">
-    <select onchange="window.location='{{ url_for('leaderboard.compare', league_id=0) }}'.replace('/0/compare', '/' + this.value + '/compare');"
-            class="field__select">
-      {% for l in leagues %}
-        <option value="{{ l.id }}"{% if l.id == league.id %} selected{% endif %}>{{ l.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-{% endif %}
-
-{% set active_tab = 'compare' %}
-{% include "leaderboard/_tabs.html" %}
+<a class="compare-back" href="{{ url_for('leaderboard.view', league_id=league.id) }}">‹ {{ league.name }}</a>
 
 {% if not comparison or not comparison.users %}
   <section class="card">

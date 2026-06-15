@@ -1101,7 +1101,21 @@ p { margin: 0 0 var(--space-3) 0; }
 
 /* --------------------------------------------- Leaderboard compare grid */
 /* Transposed round view: prediction slots are frozen rows, league members are
-   scrolling columns with rotated names. Reuses the heatmap freeze pattern. */
+   scrolling columns with angled names. Styled to match round.html — muted
+   lightweight labels, Fraunces section headers. One scroll container (not a
+   card per phase) so the frozen column and horizontal scroll stay in sync. */
+
+.compare-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--c-ink-muted);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+  margin-bottom: var(--space-3);
+}
+.compare-back:hover,
+.compare-back:focus { color: var(--c-ink); }
 
 .compare-card {
   padding-left: 0;
@@ -1128,64 +1142,76 @@ p { margin: 0 0 var(--space-3) 0; }
   background: var(--c-surface);
   box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
 }
+
+/* Angled user names — chart-axis style, ~17° off vertical, rising right.
+   Anchored at the bottom so they rise from their column without drifting
+   under the frozen label column. Nudge the rotation 194–200deg for 14–20°;
+   use 163deg instead if you'd rather they lean the other way. */
 .compare__user {
-  height: 104px;
+  height: 112px;
   vertical-align: bottom;
-  padding: 0 0 8px;
   min-width: 36px;
+  padding: 0 0 var(--space-1);
 }
 .compare__user span {
   writing-mode: vertical-rl;
-  transform: rotate(180deg);
+  transform: rotate(197deg);
+  transform-origin: bottom;
   white-space: nowrap;
   font-size: var(--fs-sm);
-  color: var(--c-ink);
+  color: var(--c-ink-muted);
 }
-.compare__user--self span { color: var(--c-accent); }
-.compare__user-link {
-  text-decoration: none;
-  color: inherit;
-  border-bottom: 1px solid var(--c-border);
-}
+.compare__user--self span { color: var(--c-ink); font-weight: 500; }
+.compare__user-link { text-decoration: none; color: inherit; }
+.compare__user-link:hover { color: var(--c-ink); }
 
-.compare__label,
-.compare__subhead {
+/* Row labels — lightweight + muted, like round.html's .pred-row__label. */
+.compare__label {
   position: sticky;
   left: 0;
+  z-index: 2;
   background: var(--c-surface);
   text-align: left;
+  padding: 0 var(--space-3) 0 2px;
   box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
-}
-.compare__label { z-index: 2; padding: 0 var(--space-3) 0 2px; }
-.compare__subhead {
-  z-index: 2;
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: var(--fs-sm);
-  color: var(--c-ink);
-  padding: var(--space-3) var(--space-3) 2px 2px;
 }
 .compare__label-text {
   display: block;
-  max-width: 110px;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-sm);
   color: var(--c-ink-muted);
 }
-.compare__label--total .compare__label-text {
+
+/* Total row — Fraunces headline numbers, label in ink, breathing room below. */
+.compare tbody tr:first-child .compare__cell { padding-bottom: var(--space-2); }
+.compare__label--total .compare__label-text { color: var(--c-ink); }
+.compare__total {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
   color: var(--c-ink);
-  font-weight: 500;
 }
 
+/* Phase header rows — Fraunces section titles, like round.html card headers. */
+.compare__subhead {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--c-surface);
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-md);
+  color: var(--c-ink);
+  padding: var(--space-5) var(--space-3) var(--space-2) 2px;
+  box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
+}
+
+/* Cells — pills exactly as round.html; self column gently tinted. */
 .compare__cell {
   text-align: center;
   min-width: 36px;
 }
 .compare__cell--self { background: var(--c-surface-alt); }
-.compare__total {
-  font-weight: 700;
-  color: var(--c-ink);
-  font-size: var(--fs-sm);
-}

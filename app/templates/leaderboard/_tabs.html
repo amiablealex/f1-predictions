@@ -5,6 +5,4 @@
      class="btn btn--small {{ 'btn--primary' if active_tab == 'h2h' else 'btn--secondary' }}">Head-to-head</a>
   <a href="{{ url_for('leaderboard.view', league_id=league.id, view='heatmap') }}"
      class="btn btn--small {{ 'btn--primary' if active_tab == 'heatmap' else 'btn--secondary' }}">Heatmap</a>
-  <a href="{{ url_for('leaderboard.compare', league_id=league.id) }}"
-     class="btn btn--small {{ 'btn--primary' if active_tab == 'compare' else 'btn--secondary' }}">Compare</a>
 </div>

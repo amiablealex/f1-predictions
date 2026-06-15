@@ -121,6 +121,11 @@
 </p>
 {% endif %}
 
+<a href="{{ url_for('leaderboard.compare', league_id=league.id) }}"
+   class="btn btn--secondary btn--block" style="margin-top: var(--space-2);">
+  Compare a round ›
+</a>
+
 <div class="maker-mark" style="margin-top: var(--space-6);">
   <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
   <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
