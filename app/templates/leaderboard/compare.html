@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% from "_macros.html" import round_header %}
+{% block content %}
+<h1>{{ league.name }}</h1>
+
+{% if leagues|length > 1 %}
+  <div class="card" style="padding:8px 12px;">
+    <select onchange="window.location='{{ url_for('leaderboard.compare', league_id=0) }}'.replace('/0/compare', '/' + this.value + '/compare');"
+            class="field__select">
+      {% for l in leagues %}
+        <option value="{{ l.id }}"{% if l.id == league.id %} selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endif %}
+
+{% set active_tab = 'compare' %}
+{% include "leaderboard/_tabs.html" %}
+
+{% if not comparison or not comparison.users %}
+  <section class="card">
+    <p class="muted">No completed rounds to compare yet. This fills in once a round is fully scored.</p>
+  </section>
+{% else %}
+  {{ round_header(comparison.round_obj, compare_league_id=league.id,
+                  prev_round=prev_round, next_round=next_round) }}
+
+  <section class="card compare-card">
+    <div class="compare-scroll">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th class="compare__corner" scope="col"></th>
+            {% for u in comparison.users %}
+              <th class="compare__user{% if u.is_self %} compare__user--self{% endif %}" scope="col">
+                <span>
+                  {% if u.is_self %}
+                    <a href="{{ url_for('rounds.view',
+                                        season=comparison.round_obj.season,
+                                        round_number=comparison.round_obj.round_number) }}"
+                       class="compare__user-link">{{ u.username }}</a>
+                  {% else %}
+                    <a href="{{ url_for('rounds.view_friend',
+                                        season=comparison.round_obj.season,
+                                        round_number=comparison.round_obj.round_number,
+                                        username=u.username) }}"
+                       class="compare__user-link">{{ u.username }}</a>
+                  {% endif %}
+                </span>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th class="compare__label compare__label--total" scope="row">
+              <span class="compare__label-text">Total</span>
+            </th>
+            {% for u in comparison.users %}
+              <td class="compare__cell{% if u.is_self %} compare__cell--self{% endif %}">
+                <span class="compare__total">{{ u.total if u.total is not none else '—' }}</span>
+              </td>
+            {% endfor %}
+          </tr>
+
+          {% for section in comparison.sections %}
+            <tr>
+              <th class="compare__subhead" scope="row">{{ section.label }}</th>
+              {% for u in comparison.users %}
+                <td class="compare__cell{% if u.is_self %} compare__cell--self{% endif %}"></td>
+              {% endfor %}
+            </tr>
+            {% for row in section.rows %}
+              <tr>
+                <th class="compare__label" scope="row">
+                  <span class="compare__label-text" title="{{ row.label }}">{{ row.label }}</span>
+                </th>
+                {% for cell in row.cells %}
+                  {% set u = comparison.users[loop.index0] %}
+                  <td class="compare__cell{% if u.is_self %} compare__cell--self{% endif %}">
+                    {% if cell is none %}
+                      <span class="pill pill--p0 muted">—</span>
+                    {% elif cell.is_exact %}
+                      <span class="pill pill--exact" aria-label="exact match">✓</span>
+                    {% else %}
+                      <span class="{{ cell.points|points_class(row.category) }}">{% if cell.points > 0 %}+{% endif %}{{ cell.points }}</span>
+                    {% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+<div class="maker-mark" style="margin-top: var(--space-6);">
+  <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
+  <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
+    F1 Predictions
+  </span>
+</div>
+{% endblock %}

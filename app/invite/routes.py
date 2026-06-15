@@ -14,7 +14,7 @@ import logging
 import time
 
 from flask import (
-    Blueprint, abort, flash, redirect, render_template, request, session, url_for,
+    Blueprint, abort, current_app, flash, redirect, render_template, request, session, url_for,
 )
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
@@ -22,7 +22,7 @@ from flask_wtf import FlaskForm
 from app.extensions import db
 from app.invite.rate_limit import is_rate_limited
 from app.models.league import League, LeagueMembership
-from app.utils import user_is_member
+from app.utils import league_is_full, user_is_member
 
 invite_bp = Blueprint("invite", __name__, template_folder="../templates")
 log = logging.getLogger(__name__)
@@ -67,6 +67,9 @@ def consume_pending_invite(user) -> tuple[League | None, bool]:
         return (None, False)
     if user_is_member(user.id, league.id):
         return (league, False)
+    if league_is_full(league.id):
+        log.info("Pending invite for full league %s dropped for user %s", league.id, user.id)
+        return (league, False)
     db.session.add(LeagueMembership(league_id=league.id, user_id=user.id))
     db.session.commit()
     return (league, True)
@@ -92,6 +95,10 @@ def landing(code: str):
         if user_is_member(current_user.id, league.id):
             flash(f"You're already in {league.name}.", "info")
             return redirect(url_for("leaderboard.view", league_id=league.id))
+        if league_is_full(league.id):
+            flash(f"{league.name} is full — it has the maximum of "
+                  f"{current_app.config['MAX_LEAGUE_MEMBERS']} members.", "error")
+            return render_template("invite/full.html", league=league, title="Invite"), 200
         return render_template(
             "invite/confirm.html",
             league=league,
@@ -122,6 +129,10 @@ def join(code: str):
     if user_is_member(current_user.id, league.id):
         flash(f"You're already in {league.name}.", "info")
         return redirect(url_for("leaderboard.view", league_id=league.id))
+    if league_is_full(league.id):
+        flash(f"{league.name} is full — it has the maximum of "
+              f"{current_app.config['MAX_LEAGUE_MEMBERS']} members.", "error")
+        return redirect(url_for("leagues.index"))
     db.session.add(LeagueMembership(league_id=league.id, user_id=current_user.id))
     db.session.commit()
     flash(f"Joined {league.name}.", "success")

@@ -22,7 +22,14 @@ from app.models.league import League, LeagueMembership
 from app.models.prediction import PredictionScore
 from app.models.round import Round, RoundState
 from app.models.user import User
-from app.utils import assert_member, most_recent_visible_round, user_leagues
+from app.utils import (
+    assert_member,
+    get_neighbour_rounds,
+    get_round_by_number,
+    load_round_comparison,
+    most_recent_visible_round,
+    user_leagues,
+)
 
 leaderboard_bp = Blueprint("leaderboard", __name__, template_folder="../templates")
 
@@ -80,6 +87,57 @@ def view(league_id: int):
         friend_landing=most_recent_visible_round(current_app.config["F1_SEASON"]),
         last_scored=last_scored,
         title=f"{league.name} · Leaderboard",
+    )
+
+
+@leaderboard_bp.route("/<int:league_id>/compare")
+@login_required
+def compare(league_id: int):
+    """Everyone's per-prediction scores for one round, side by side.
+
+    League-scoped. Defaults to the most recent COMPLETED round; ?round=<n>
+    selects a specific one. Only locked rounds are viewable (scores for an
+    unlocked round would leak in-progress predictions). Prev/next arrows page
+    through locked rounds, mirroring the round view.
+    """
+    league = assert_member(current_user.id, league_id)
+    season = current_app.config["F1_SEASON"]
+
+    round_number = request.args.get("round", type=int)
+    if round_number is not None:
+        rd = get_round_by_number(season, round_number)
+        if rd is None:
+            abort(404)
+        if not rd.predictions_locked:
+            abort(403)
+    else:
+        rd = (
+            db.session.query(Round)
+            .filter(Round.season == season, Round.state == RoundState.COMPLETED)
+            .order_by(Round.round_number.desc())
+            .first()
+        )
+
+    member_ids = _league_member_ids(league_id)
+    members_by_id = {
+        u.id: u for u in db.session.query(User).filter(User.id.in_(member_ids)).all()
+    }
+
+    comparison = None
+    prev_round = next_round = None
+    if rd is not None:
+        comparison = load_round_comparison(rd.id, members_by_id, current_user.id)
+        prev_round, next_round = get_neighbour_rounds(rd, locked_only=True)
+
+    return render_template(
+        "leaderboard/compare.html",
+        league=league,
+        leagues=user_leagues(current_user.id),
+        comparison=comparison,
+        round_obj=rd,
+        prev_round=prev_round,
+        next_round=next_round,
+        title=f"{league.name} · Compare",
     )
 
 

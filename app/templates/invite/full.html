@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-page__hero">
+    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" alt="" class="hero-image">
+  </div>
+  <h1>League full</h1>
+  <p class="auth-page__subtitle">
+    {{ league.name }} has reached its limit of {{ config['MAX_LEAGUE_MEMBERS'] }} members,
+    so it can't take any more right now.
+  </p>
+  <a href="{{ url_for('leagues.index') }}" class="btn btn--primary btn--block">Your leagues</a>
+</div>
+{% endblock %}

@@ -221,6 +221,11 @@ class Config:
     # Hard cap on items per leaderboard page (small group app, not paginated heavily)
     LEADERBOARD_PAGE_SIZE = 100
 
+    # Hard cap on members per league. Safeguards the comparison grid's column
+    # count (rotated headers stop being legible past ~40) and is a sane bound
+    # for a friend-group app generally.
+    MAX_LEAGUE_MEMBERS = _env_int("MAX_LEAGUE_MEMBERS", 50)
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

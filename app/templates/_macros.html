@@ -1,7 +1,14 @@
 {# Reusable macros shared across views. #}
 
-{% macro round_header(round_obj, prev_round=None, next_round=None, friend_username=None) %}
-  {% if friend_username %}
+{% macro round_header(round_obj, prev_round=None, next_round=None, friend_username=None, compare_league_id=None) %}
+  {% if compare_league_id %}
+    {% set prev_url = url_for('leaderboard.compare',
+                              league_id=compare_league_id,
+                              round=prev_round.round_number) if prev_round %}
+    {% set next_url = url_for('leaderboard.compare',
+                              league_id=compare_league_id,
+                              round=next_round.round_number) if next_round %}
+  {% elif friend_username %}
     {% set prev_url = url_for('rounds.view_friend',
                               season=prev_round.season,
                               round_number=prev_round.round_number,

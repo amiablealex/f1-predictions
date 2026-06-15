@@ -13,14 +13,8 @@
   </div>
 {% endif %}
 
-<div class="row" style="gap:8px;margin-bottom:1rem;">
-  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='total') }}"
-     class="btn btn--small {{ 'btn--primary' if view_kind == 'total' else 'btn--secondary' }}">Total points</a>
-  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='h2h') }}"
-     class="btn btn--small {{ 'btn--primary' if view_kind == 'h2h' else 'btn--secondary' }}">Head-to-head</a>
-  <a href="{{ url_for('leaderboard.view', league_id=league.id, view='heatmap') }}"
-     class="btn btn--small {{ 'btn--primary' if view_kind == 'heatmap' else 'btn--secondary' }}">Heatmap</a>
-</div>
+{% set active_tab = view_kind %}
+{% include "leaderboard/_tabs.html" %}
 
 {% if view_kind == 'heatmap' %}
   <section class="card heatmap-card">

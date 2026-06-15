@@ -1083,3 +1083,109 @@ p { margin: 0 0 var(--space-3) 0; }
 .heatmap__cell--medium    { background: var(--heat-medium-bg);    color: var(--heat-medium-fg); }
 .heatmap__cell--high      { background: var(--heat-high-bg);      color: var(--heat-high-fg); }
 .heatmap__cell--very-high { background: var(--heat-very-high-bg); color: var(--heat-very-high-fg); }
+
+/* --------------------------------------------- Leaderboard tabs (scrollable) */
+/* Four tabs overflow the frame on narrow screens; scroll horizontally rather
+   than wrap. Scrollbar hidden — the cut-off tab is the affordance. */
+
+.leaderboard-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.leaderboard-tabs::-webkit-scrollbar { display: none; }
+.leaderboard-tabs .btn { flex: 0 0 auto; white-space: nowrap; }
+
+/* --------------------------------------------- Leaderboard compare grid */
+/* Transposed round view: prediction slots are frozen rows, league members are
+   scrolling columns with rotated names. Reuses the heatmap freeze pattern. */
+
+.compare-card {
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+.compare-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--space-4);
+}
+.compare {
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.compare th,
+.compare td { padding: 0; }
+
+.compare__corner {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--c-surface);
+  box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
+}
+.compare__user {
+  height: 104px;
+  vertical-align: bottom;
+  padding: 0 0 8px;
+  min-width: 36px;
+}
+.compare__user span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+}
+.compare__user--self span { color: var(--c-accent); }
+.compare__user-link {
+  text-decoration: none;
+  color: inherit;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.compare__label,
+.compare__subhead {
+  position: sticky;
+  left: 0;
+  background: var(--c-surface);
+  text-align: left;
+  box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
+}
+.compare__label { z-index: 2; padding: 0 var(--space-3) 0 2px; }
+.compare__subhead {
+  z-index: 2;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-sm);
+  color: var(--c-ink);
+  padding: var(--space-3) var(--space-3) 2px 2px;
+}
+.compare__label-text {
+  display: block;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+}
+.compare__label--total .compare__label-text {
+  color: var(--c-ink);
+  font-weight: 500;
+}
+
+.compare__cell {
+  text-align: center;
+  min-width: 36px;
+}
+.compare__cell--self { background: var(--c-surface-alt); }
+.compare__total {
+  font-weight: 700;
+  color: var(--c-ink);
+  font-size: var(--fs-sm);
+}

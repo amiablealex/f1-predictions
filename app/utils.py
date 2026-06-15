@@ -6,6 +6,7 @@ the round view, the friend's-view, and the admin overrides.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import defaultdict
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -904,3 +905,269 @@ def heatmap_band(points: int) -> str:
         if threshold is None or points >= threshold:
             return band
     return current_app.config["HEATMAP_THRESHOLDS"][-1][1]
+
+def league_member_count(league_id: int) -> int:
+    return (
+        db.session.query(LeagueMembership)
+        .filter_by(league_id=league_id)
+        .count()
+    )
+
+
+def league_is_full(league_id: int) -> bool:
+    from flask import current_app
+    return league_member_count(league_id) >= current_app.config["MAX_LEAGUE_MEMBERS"]
+
+
+# =============================================================================
+# Round comparison grid (leaderboard "Compare" view)
+# =============================================================================
+
+
+@dataclass
+class ComparisonCell:
+    points: int
+    is_exact: bool
+
+
+@dataclass
+class ComparisonRow:
+    label: str
+    category: str
+    cells: list  # [ComparisonCell | None], aligned with RoundComparison.users
+
+
+@dataclass
+class ComparisonSection:
+    label: str
+    rows: list  # list[ComparisonRow]
+
+
+@dataclass
+class ComparisonUser:
+    username: str
+    is_self: bool
+    total: int | None  # None when the user has no score rows for this round
+
+
+@dataclass
+class RoundComparison:
+    round_obj: Round
+    users: list  # list[ComparisonUser], display order (round total desc)
+    sections: list  # list[ComparisonSection]
+
+
+def load_round_comparison(
+    round_id: int, members_by_id: dict[int, User], viewer_id: int,
+) -> RoundComparison:
+    """Everyone-at-once grid for one round.
+
+    Batched: a fixed number of queries regardless of league size. Points come
+    from one PredictionScore query; the exact-match ticks reuse the same
+    round_display helpers as the round view (computed in Python from
+    round-level results loaded once), so the grid stays in lockstep with
+    round.html.
+    """
+    rd = (
+        db.session.query(Round)
+        .options(
+            joinedload(Round.sessions).joinedload(Session.results),
+            joinedload(Round.round_drivers).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.random_quali_driver).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.qh2h_driver_a).joinedload(RoundDriver.expected_driver),
+            joinedload(Round.qh2h_driver_b).joinedload(RoundDriver.expected_driver),
+        )
+        .filter(Round.id == round_id)
+        .one_or_none()
+    )
+    if rd is None:
+        abort(404)
+
+    member_ids = list(members_by_id.keys())
+    sessions = {s.session_type: s for s in rd.sessions}
+    round_drivers_list = list(rd.round_drivers)
+    drivers_by_id = _drivers_lookup(rd)
+
+    # ---- batch every prediction table once, bucketed by user ----
+    def _by_user_pos(model):
+        out: dict[int, dict[int, object]] = defaultdict(dict)
+        for p in (db.session.query(model)
+                  .filter(model.round_id == round_id, model.user_id.in_(member_ids)).all()):
+            out[p.user_id][p.position] = p
+        return out
+
+    def _by_user(model):
+        out: dict[int, object] = {}
+        for p in (db.session.query(model)
+                  .filter(model.round_id == round_id, model.user_id.in_(member_ids)).all()):
+            out[p.user_id] = p
+        return out
+
+    top10_by = _by_user_pos(Top10Prediction)
+    qtop3_by = _by_user_pos(Top3QualiPrediction)
+    stop3_by = _by_user_pos(Top3SprintPrediction) if rd.weekend_type == WeekendType.SPRINT else {}
+    pole_by = _by_user(PoleTimePrediction)            # noqa: F841  (kept for symmetry)
+    flap_by = _by_user(FastestLapPrediction)
+    dnf_by = _by_user(DnfCountPrediction)
+    places_by = _by_user(PlacesGainedPrediction)
+    rqd_by = _by_user(QualiRandomDriverPrediction)
+    qh2h_by = _by_user(QualiHeadToHeadPrediction)
+    qnth_by = _by_user(QualiNthPrediction)
+
+    specials_by: dict[int, dict[str, object]] = defaultdict(dict)
+    for p in (db.session.query(SpecialPrediction)
+              .filter(SpecialPrediction.round_id == round_id,
+                      SpecialPrediction.user_id.in_(member_ids)).all()):
+        specials_by[p.user_id][p.special_key] = p
+
+    special_outcomes = {
+        o.special_key: o for o in
+        db.session.query(SpecialOutcome).filter_by(round_id=round_id).all()
+    }
+
+    contribution_defs = (
+        db.session.query(ContributionDefinition)
+        .filter_by(round_id=round_id)
+        .order_by(ContributionDefinition.created_at.asc())
+        .all()
+    )
+    contrib_preds_by: dict[int, dict[int, object]] = defaultdict(dict)
+    if contribution_defs:
+        def_ids = [d.id for d in contribution_defs]
+        for cp in (db.session.query(ContributionPrediction)
+                   .filter(ContributionPrediction.contribution_id.in_(def_ids),
+                           ContributionPrediction.user_id.in_(member_ids)).all()):
+            contrib_preds_by[cp.user_id][cp.contribution_id] = cp
+
+    # ---- batch all scores once ----
+    scores_by: dict[int, dict] = defaultdict(dict)
+    special_scores_by: dict[int, dict] = defaultdict(dict)
+    contrib_scores_by: dict[int, dict] = defaultdict(dict)
+    totals_by: dict[int, int] = {}
+    for s in (db.session.query(PredictionScore)
+              .filter(PredictionScore.round_id == round_id,
+                      PredictionScore.user_id.in_(member_ids)).all()):
+        totals_by[s.user_id] = totals_by.get(s.user_id, 0) + s.points
+        if s.kind == PredictionType.SPECIAL and s.special_key is not None:
+            special_scores_by[s.user_id][s.special_key] = s
+        elif s.kind == PredictionType.CONTRIBUTION and s.contribution_id is not None:
+            contrib_scores_by[s.user_id][s.contribution_id] = s
+        else:
+            scores_by[s.user_id][(s.kind, s.position)] = s
+
+    # ---- per-user actuals (pure Python; reuses the round-view helpers) ----
+    actuals_by: dict[int, dict] = {}
+    special_actuals_by: dict[int, dict] = {}
+    contrib_actuals_by: dict[int, dict] = {}
+    for uid in member_ids:
+        a, sa, _sub = _build_actuals(
+            rd, sessions, round_drivers_list, drivers_by_id,
+            top10_by.get(uid, {}), qtop3_by.get(uid, {}), stop3_by.get(uid, {}),
+            qnth_by.get(uid), qh2h_by.get(uid), flap_by.get(uid), dnf_by.get(uid),
+            places_by.get(uid), rqd_by.get(uid), specials_by.get(uid, {}), special_outcomes,
+        )
+        actuals_by[uid] = a
+        special_actuals_by[uid] = sa
+        contrib_actuals_by[uid] = _build_contribution_actuals(
+            contribution_defs, contrib_preds_by.get(uid, {}), drivers_by_id,
+        )
+
+    # ---- order columns by round total desc, then username ----
+    ordered_ids = sorted(
+        member_ids,
+        key=lambda uid: (
+            -(totals_by[uid] if uid in totals_by else -10**9),
+            members_by_id[uid].username.lower(),
+        ),
+    )
+    users = [
+        ComparisonUser(
+            username=members_by_id[uid].username,
+            is_self=(uid == viewer_id),
+            total=totals_by.get(uid),
+        )
+        for uid in ordered_ids
+    ]
+
+    # ---- cell builders (each list aligned with `users`) ----
+    def _cell(score, actual):
+        if score is None:
+            return None
+        return ComparisonCell(points=score.points, is_exact=bool(actual and actual.is_exact))
+
+    def std_cells(kind, pos):
+        return [_cell(scores_by.get(uid, {}).get((kind, pos)),
+                      actuals_by.get(uid, {}).get((kind, pos))) for uid in ordered_ids]
+
+    def special_cells(key):
+        return [_cell(special_scores_by.get(uid, {}).get(key),
+                      special_actuals_by.get(uid, {}).get(key)) for uid in ordered_ids]
+
+    def contrib_cells(cid):
+        return [_cell(contrib_scores_by.get(uid, {}).get(cid),
+                      contrib_actuals_by.get(uid, {}).get(cid)) for uid in ordered_ids]
+
+    def _code(d):
+        if d is None:
+            return "?"
+        return d.code or d.driver_ref[:3].upper()
+
+    # ---- assemble sections in the same order as the round view ----
+    sections: list[ComparisonSection] = []
+
+    if rd.weekend_type == WeekendType.SPRINT:
+        sections.append(ComparisonSection(
+            label="Sprint",
+            rows=[ComparisonRow(f"Sprint P{pos}", "sprint_top3",
+                                std_cells(PredictionType.SPRINT_TOP3, pos))
+                  for pos in (1, 2, 3)],
+        ))
+
+    qrows = [ComparisonRow("Pole time", "pole_time",
+                           std_cells(PredictionType.POLE_TIME, None))]
+    for pos in (1, 2, 3):
+        qrows.append(ComparisonRow(f"Quali P{pos}", "quali_top3",
+                                   std_cells(PredictionType.QUALI_TOP3, pos)))
+    if rd.random_quali_driver is not None:
+        qrows.append(ComparisonRow(
+            driver_label(rd.random_quali_driver.expected_driver),
+            "quali_random_driver",
+            std_cells(PredictionType.QUALI_RANDOM_DRIVER, None),
+        ))
+    if rd.qh2h_driver_a is not None and rd.qh2h_driver_b is not None:
+        qrows.append(ComparisonRow(
+            f"{_code(rd.qh2h_driver_a.expected_driver)} v {_code(rd.qh2h_driver_b.expected_driver)}",
+            "quali_h2h",
+            std_cells(PredictionType.QUALI_HEAD_TO_HEAD, None),
+        ))
+    if rd.quali_nth_position is not None:
+        qrows.append(ComparisonRow(
+            f"Who qualifies P{rd.quali_nth_position}?",
+            "quali_nth",
+            std_cells(PredictionType.QUALI_NTH, None),
+        ))
+    sections.append(ComparisonSection("Qualifying", qrows))
+
+    rrows = [ComparisonRow(f"Race P{pos}", "race_top10",
+                           std_cells(PredictionType.RACE_TOP10, pos))
+             for pos in range(1, 11)]
+    rrows.append(ComparisonRow("Fastest lap", "fastest_lap",
+                               std_cells(PredictionType.FASTEST_LAP, None)))
+    rrows.append(ComparisonRow("Places gained", "places_gained",
+                               std_cells(PredictionType.PLACES_GAINED, None)))
+    rrows.append(ComparisonRow("DNFs", "dnf_count",
+                               std_cells(PredictionType.DNF_COUNT, None)))
+    for key in (rd.special_a_key, rd.special_b_key):
+        if key and key in SPECIALS_BY_KEY:
+            rrows.append(ComparisonRow(SPECIALS_BY_KEY[key].label, "special",
+                                       special_cells(key)))
+    sections.append(ComparisonSection("Race", rrows))
+
+    if contribution_defs:
+        sections.append(ComparisonSection(
+            label="Wildcards",
+            rows=[ComparisonRow(d.question_text, "special", contrib_cells(d.id))
+                  for d in contribution_defs],
+        ))
+
+    return RoundComparison(round_obj=rd, users=users, sections=sections)

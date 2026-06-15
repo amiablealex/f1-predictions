@@ -6,7 +6,7 @@ and can rename, remove members, or delete the league.
 """
 from __future__ import annotations
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
@@ -14,7 +14,7 @@ from wtforms.validators import DataRequired, Length
 
 from app.extensions import db
 from app.models.league import League, LeagueMembership
-from app.utils import user_is_admin_of, user_is_member, user_leagues
+from app.utils import league_is_full, user_is_admin_of, user_is_member, user_leagues
 
 leagues_bp = Blueprint("leagues", __name__, template_folder="../templates")
 
@@ -90,6 +90,13 @@ def join():
         if user_is_member(current_user.id, league.id):
             flash("You're already in that league.", "info")
             return redirect(url_for("leagues.detail", league_id=league.id))
+        if league_is_full(league.id):
+            flash(
+                f"{league.name} is full — it already has the maximum of "
+                f"{current_app.config['MAX_LEAGUE_MEMBERS']} members.",
+                "error",
+            )
+            return render_template("leagues/join.html", form=form, title="Join league")
         db.session.add(LeagueMembership(league_id=league.id, user_id=current_user.id))
         db.session.commit()
         flash(f"Joined {league.name}.", "success")
