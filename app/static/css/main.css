@@ -1155,6 +1155,7 @@ p { margin: 0 0 var(--space-3) 0; }
 }
 .compare__user span {
   writing-mode: vertical-rl;
+  transform: rotate(180deg);
   white-space: nowrap;
   font-size: var(--fs-sm);
   color: var(--c-ink-muted);
@@ -1204,7 +1205,7 @@ p { margin: 0 0 var(--space-3) 0; }
   font-weight: 500;
   font-size: var(--fs-md);
   color: var(--c-ink);
-  padding: 50px var(--space-3) var(--space-2) 2px;
+  padding: var(--space-3) var(--space-3) var(--space-2) 2px;
   box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
 }
 
@@ -1214,3 +1215,9 @@ p { margin: 0 0 var(--space-3) 0; }
   min-width: 36px;
 }
 .compare__cell--self { background: var(--c-surface-alt); }
+
+/* Spacing between phase headers */
+.compare tbody tr:has(.compare__subhead) td {
+  padding-top: 50px;
+}
+.compare__subhead { padding-top: 50px; }
