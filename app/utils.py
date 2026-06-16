@@ -1072,11 +1072,27 @@ def load_round_comparison(
             contribution_defs, contrib_preds_by.get(uid, {}), drivers_by_id,
         )
 
-    # ---- order columns by round total desc, then username ----
+    # ---- order columns by SEASON total desc, then username ----
+    # Season-scoped so the column order stays stable as the user pages
+    # between rounds (ordering by the round's own total would reshuffle
+    # everyone on each arrow press).
+    season_totals = dict(
+        db.session.query(
+            PredictionScore.user_id,
+            func.coalesce(func.sum(PredictionScore.points), 0),
+        )
+        .join(Round, Round.id == PredictionScore.round_id)
+        .filter(
+            PredictionScore.user_id.in_(member_ids),
+            Round.season == rd.season,
+        )
+        .group_by(PredictionScore.user_id)
+        .all()
+    )
     ordered_ids = sorted(
         member_ids,
         key=lambda uid: (
-            -(totals_by[uid] if uid in totals_by else -10**9),
+            -int(season_totals.get(uid, 0)),
             members_by_id[uid].username.lower(),
         ),
     )
