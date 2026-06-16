@@ -1125,7 +1125,7 @@ p { margin: 0 0 var(--space-3) 0; }
 .compare-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-6) 0 var(--space-4);
 }
 .compare {
   border-collapse: separate;
@@ -1148,18 +1148,22 @@ p { margin: 0 0 var(--space-3) 0; }
    under the frozen label column. Nudge the rotation 194–200deg for 14–20°;
    use 163deg instead if you'd rather they lean the other way. */
 .compare__user {
-  height: 112px;
+  height: 96px;
   vertical-align: bottom;
   min-width: 36px;
-  padding: 0 0 var(--space-1);
+  padding: 0;
+  position: relative;
 }
 .compare__user span {
-  writing-mode: vertical-rl;
-  transform: rotate(197deg);
-  transform-origin: bottom;
+  position: absolute;
+  bottom: var(--space-2);
+  left: 50%;
+  transform-origin: left bottom;
+  transform: rotate(-25deg);
   white-space: nowrap;
   font-size: var(--fs-sm);
   color: var(--c-ink-muted);
+  line-height: 1;
 }
 .compare__user--self span { color: var(--c-ink); font-weight: 500; }
 .compare__user-link { text-decoration: none; color: inherit; }
@@ -1182,6 +1186,7 @@ p { margin: 0 0 var(--space-3) 0; }
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-sm);
+  font-weight: 400;
   color: var(--c-ink-muted);
 }
 
@@ -1205,7 +1210,7 @@ p { margin: 0 0 var(--space-3) 0; }
   font-weight: 500;
   font-size: var(--fs-md);
   color: var(--c-ink);
-  padding: var(--space-5) var(--space-3) var(--space-2) 2px;
+  padding: var(--space-6) var(--space-3) var(--space-2) 2px;
   box-shadow: 6px 0 6px -6px rgba(60, 50, 30, 0.35);
 }
 
