@@ -1221,3 +1221,15 @@ p { margin: 0 0 var(--space-3) 0; }
   padding-top: 50px;
 }
 .compare__subhead { padding-top: 50px; }
+
+/* pprp column — no pill, laid straight on the surface, quieter than Total. */
+.leaderboard-row__pprp {
+  min-width: 2.6em;
+  text-align: right;
+  color: var(--c-ink-muted);
+  font-size: var(--fs-sm);
+}
+.leaderboard-row__pprp-head {
+  display: inline-flex;
+  align-items: center;
+}

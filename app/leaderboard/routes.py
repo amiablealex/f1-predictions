@@ -42,6 +42,7 @@ class LeaderboardRow:
     last_score: int             # most-recent-scored-round score
     rank: int                   # 1-based dense rank on `score` (ties share)
     is_self: bool
+    pprp: float | None = None   # points per round participated (total view only)
 
 
 @leaderboard_bp.route("/")
@@ -185,6 +186,16 @@ def _build_total_rows(
         .all()
     )
 
+    part_counts = dict(
+        db.session.query(
+            PredictionScore.user_id,
+            func.count(func.distinct(PredictionScore.round_id)),
+        )
+        .filter(PredictionScore.user_id.in_(member_ids))
+        .group_by(PredictionScore.user_id)
+        .all()
+    )
+
     last_scores: dict[int, int] = {}
     if last_scored is not None:
         last_scores = dict(
@@ -205,7 +216,11 @@ def _build_total_rows(
         for u in members_by_id.values()
     ]
     triples.sort(key=lambda p: (-p[1], -p[2], members_by_id[p[0]].username.lower()))
-    return _rank(triples, members_by_id)
+    rows = _rank(triples, members_by_id)
+    for row in rows:
+        n = int(part_counts.get(row.user_id, 0))
+        row.pprp = round(row.score / n, 1) if n else None
+    return rows
 
 
 def _build_h2h_rows(

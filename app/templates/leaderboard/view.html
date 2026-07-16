@@ -77,6 +77,14 @@
           <span>Last (R{{ last_scored.round_number }})</span>
         {% endif %}
         <span>Total</span>
+        {% if view_kind == 'total' %}
+          <span class="leaderboard-row__pprp-head">
+            pprp
+            <button type="button" class="tooltip-trigger"
+                    aria-label="What is this?" aria-expanded="false"
+                    data-tooltip="Points per round participated — your average score across only the rounds you made at least one prediction in. Rounds you sat out don't count.">i</button>
+          </span>
+        {% endif %}
       </div>
     </div>
 
@@ -110,6 +118,9 @@
             {% endif %}
           {% endif %}
           <span class="tabular pill pill--p10">{{ row.score }}</span>
+          {% if view_kind == 'total' %}
+            <span class="tabular leaderboard-row__pprp">{{ row.pprp if row.pprp is not none else '—' }}</span>
+          {% endif %}
         </div>
       </div>
     {% endfor %}
