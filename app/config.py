@@ -36,6 +36,12 @@ def _env_int(name: str, default: int) -> int:
 
 class Config:
     # -------------------------------------------------------------------------
+    # Release — bump on every tagged release. Sent to Jolpica in the
+    # User-Agent header and shown in the UI footer.
+    # -------------------------------------------------------------------------
+    APP_VERSION = "1.0.1"
+
+    # -------------------------------------------------------------------------
     # Flask core
     # -------------------------------------------------------------------------
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
@@ -84,7 +90,8 @@ class Config:
         "JOLPICA_BASE_URL", "https://api.jolpi.ca/ergast/f1"
     ).rstrip("/")
     JOLPICA_USER_AGENT = os.environ.get(
-        "JOLPICA_USER_AGENT", "f1-predictions/1.0"
+        "JOLPICA_USER_AGENT",
+        f"KitsniffF1Predictions/{APP_VERSION} (+https://f1.kitsniff.com)",
     )
     # Conservative client-side rate limit. Jolpica is 4 req/s, 500/hr.
     JOLPICA_MIN_REQUEST_INTERVAL_SECONDS = 0.3

@@ -40,6 +40,7 @@ from app.api.exceptions import (
     JolpicaParseError,
     JolpicaRateLimitError,
     JolpicaTransientError,
+    JolpicaBlockedError,
 )
 
 log = logging.getLogger(__name__)
@@ -245,6 +246,10 @@ class JolpicaClient:
     ):
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
+        if not user_agent or not user_agent.strip():
+            raise ValueError("JOLPICA_USER_AGENT is empty — Jolpica blocks default/empty agents")
+        if any(bad in user_agent.lower() for bad in ("python-requests", "curl/", "node", "mozilla/")):
+            raise ValueError(f"JOLPICA_USER_AGENT looks like a default agent: {user_agent!r}")
         self.min_interval = min_request_interval_seconds
         self.timeout = timeout_seconds
         self.max_retries = max_retries
@@ -289,6 +294,14 @@ class JolpicaClient:
                 last_exc = JolpicaTransientError(f"{resp.status_code} from {url}")
                 time.sleep(2 ** attempt)
                 continue
+
+            if resp.status_code == 403:
+                log.error(
+                    "Jolpica 403 BLOCKED on %s (user-agent=%r) — check "
+                    "https://github.com/jolpica/jolpica-f1/discussions",
+                    url, self.user_agent,
+                )
+                raise JolpicaBlockedError(f"403 from {url}")
 
             if resp.status_code == 404:
                 raise JolpicaNotFoundError(f"404 from {url}")

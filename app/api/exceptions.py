@@ -26,3 +26,7 @@ class JolpicaParseError(JolpicaError):
 
 class JolpicaNotFoundError(JolpicaError):
     """Endpoint returned an empty result (e.g. round results not yet published)."""
+
+
+class JolpicaBlockedError(JolpicaError):
+    """Blocked by Jolpica (HTTP 403) — likely user-agent or policy. Do not retry."""

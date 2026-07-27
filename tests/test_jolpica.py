@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
+import requests
+
 import pytest
 
 from app.api.exceptions import (
@@ -124,6 +126,25 @@ def _client():
         min_request_interval_seconds=0.0,
         timeout_seconds=5,
     )
+
+
+def test_user_agent_header_is_sent(monkeypatch):
+    captured = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        captured["headers"] = headers
+        raise requests.exceptions.RequestException("stop here")
+
+    monkeypatch.setattr("app.api.jolpica.requests.get", fake_get)
+    client = JolpicaClient(base_url="https://example.test", user_agent="TestApp/9.9.9", max_retries=1)
+    with pytest.raises(JolpicaTransientError):
+        client._get_json("/2026.json")
+    assert captured["headers"]["User-Agent"] == "TestApp/9.9.9"
+
+
+def test_default_user_agent_rejected():
+    with pytest.raises(ValueError):
+        JolpicaClient(base_url="https://example.test", user_agent="python-requests/2.32.3")
 
 
 def test_get_season_schedule_parses_standard_and_sprint_weekends():

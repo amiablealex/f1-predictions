@@ -107,7 +107,8 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _shutdown)
 
     log.info(
-        "worker: scheduler starting (timezone=%s, results_poll=%dm, schedule_sync=%dh)",
+        "worker: scheduler starting (ua=%s, timezone=%s, results_poll=%dm, schedule_sync=%dh)",
+        app.config["JOLPICA_USER_AGENT"],
         app.config["TIMEZONE"],
         app.config["RESULTS_POLL_INTERVAL_MINUTES"],
         app.config["SCHEDULE_SYNC_INTERVAL_HOURS"],
