@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row row--space">
+  <h1 style="margin:0;">Metrics</h1>
+  <a href="{{ url_for('admin.dashboard') }}" class="btn btn--small btn--secondary">Admin</a>
+</div>
+
+{% set s = m.snapshot %}
+<section class="card">
+  <h3>Snapshot</h3>
+  <div class="metrics-stats">
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.total_users }}</span>
+      <span class="metrics-stat__label">users</span>
+    </div>
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.predicted_ever }}</span>
+      <span class="metrics-stat__label">predicted ever</span>
+    </div>
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.never_predicted }}</span>
+      <span class="metrics-stat__label">never predicted</span>
+    </div>
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.active_latest }}</span>
+      <span class="metrics-stat__label">active latest round</span>
+    </div>
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.total_leagues }}</span>
+      <span class="metrics-stat__label">leagues</span>
+    </div>
+    <div class="metrics-stat">
+      <span class="metrics-stat__value tabular">{{ s.avg_league_size }}</span>
+      <span class="metrics-stat__label">avg league size</span>
+    </div>
+  </div>
+  {% if s.latest_round %}
+    <p class="small muted" style="margin-bottom:0;">
+      Latest closed round: {{ s.latest_round.round_number }}. {{ s.latest_round.gp_name }}
+    </p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h3>Participation by round</h3>
+  <p class="small muted">
+    Eligible = registered before the deadline. New = first-ever submission.
+    Partial = fewer rows than the fullest submission that round.
+  </p>
+  <div class="metrics-scroll">
+    <table class="metrics-table">
+      <thead>
+        <tr>
+          <th class="metrics-table__num">R</th>
+          <th>Grand Prix</th>
+          <th class="metrics-table__num">Elig</th>
+          <th class="metrics-table__num">Sub</th>
+          <th class="metrics-table__num">New</th>
+          <th class="metrics-table__num">%</th>
+          <th class="metrics-table__num">Part</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in m.participation %}
+          <tr>
+            <td class="metrics-table__num tabular">{{ row.round.round_number }}</td>
+            <td>
+              {{ row.round.gp_name }}
+              {% if not row.is_closed %}
+                <span class="pill pill--status-upcoming">open</span>
+              {% endif %}
+            </td>
+            <td class="metrics-table__num tabular">{{ row.eligible }}</td>
+            <td class="metrics-table__num tabular">{{ row.submitted }}</td>
+            <td class="metrics-table__num tabular muted">{{ row.new or '' }}</td>
+            <td class="metrics-table__num tabular">{{ row.pct }}%</td>
+            <td class="metrics-table__num tabular muted">{{ row.partial or '' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="muted">No rounds with activity yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Signups by month</h3>
+  {% for row in m.signups %}
+    <div class="metrics-bar">
+      <span class="metrics-bar__label tabular">{{ row.label }}</span>
+      <span class="metrics-bar__track">
+        <span class="metrics-bar__fill" style="width:{{ row.width }}%;"></span>
+      </span>
+      <span class="metrics-bar__value tabular">{{ row.count }}</span>
+    </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h3>When people finalise</h3>
+  <p class="small muted">
+    Predictions are re-written wholesale on every save, so this measures the
+    last edit before the deadline, not the first submission.
+  </p>
+  {% for row in m.timing %}
+    <div class="metrics-bar">
+      <span class="metrics-bar__label metrics-bar__label--wide">{{ row.label }}</span>
+      <span class="metrics-bar__track">
+        <span class="metrics-bar__fill" style="width:{{ row.width }}%;"></span>
+      </span>
+      <span class="metrics-bar__value tabular">{{ row.count }} · {{ row.pct }}%</span>
+    </div>
+  {% endfor %}
+</section>
+
+{% set a = m.attention %}
+<section class="card">
+  <h3>Needs attention</h3>
+  {% for key, label, hint in [
+      ('predicted_no_league', 'Predicting with no league', 'No leaderboard, no comparison — submitting into the void.'),
+      ('lapsed', 'Lapsed', 'Predicted recently, absent from the latest closed round.'),
+      ('warm_inactive', 'Warm but inactive', 'Logged in within 30 days, no prediction in the latest round.'),
+      ('never_predicted', 'Never predicted', 'Registered, never submitted anything.'),
+      ('no_league', 'In no league', 'Includes users who have never predicted.')
+  ] %}
+    <div class="metrics-group">
+      <div class="row row--space">
+        <span class="metrics-group__title">{{ label }}</span>
+        <span class="pill {{ 'pill--p0' if not a[key] else 'pill--p2' }} tabular">{{ a[key]|length }}</span>
+      </div>
+      <div class="xs muted">{{ hint }}</div>
+      {% if a[key] %}
+        <div class="metrics-names">
+          {% for u in a[key] %}<span class="metrics-name">{{ u.username }}</span>{% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h3>Users ({{ m.users|length }})</h3>
+  <div class="metrics-scroll">
+    <table class="metrics-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th class="metrics-table__num">Joined</th>
+          <th class="metrics-table__num">Rnds</th>
+          <th class="metrics-table__num">Streak</th>
+          <th class="metrics-table__num">Last</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in m.users %}
+          <tr>
+            <td>
+              {{ row.user.username }}
+              {% if row.user.is_admin %}<span class="pill pill--status-completed">admin</span>{% endif %}
+              {% if row.user.is_contributor %}<span class="pill pill--status-pending">contributor</span>{% endif %}
+            </td>
+            <td class="metrics-table__num tabular muted">{{ row.user.created_at.strftime('%d %b %y') }}</td>
+            <td class="metrics-table__num tabular">{{ row.rounds_predicted }}</td>
+            <td class="metrics-table__num tabular">{{ row.streak or '' }}</td>
+            <td class="metrics-table__num tabular muted">
+              {{ row.last_round if row.last_round is not none else '—' }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% set h = m.health %}
+<section class="card">
+  <h3>Data health</h3>
+  <div class="metrics-health">
+    <div class="row row--space">
+      <span>Sessions stuck past their end time</span>
+      <span class="pill {{ 'pill--p0' if not h.stale_sessions else 'pill--neg' }} tabular">{{ h.stale_sessions }}</span>
+    </div>
+    <div class="row row--space">
+      <span>Completed sessions never scored</span>
+      <span class="pill {{ 'pill--p0' if not h.unscored_sessions else 'pill--neg' }} tabular">{{ h.unscored_sessions }}</span>
+    </div>
+    <div class="row row--space">
+      <span>Rounds completed</span>
+      <span class="pill pill--p2 tabular">{{ h.rounds_completed }} / {{ h.rounds_total }}</span>
+    </div>
+    <div class="row row--space">
+      <span>Rounds with scores</span>
+      <span class="pill pill--p2 tabular">{{ h.rounds_with_scores }} / {{ h.rounds_total }}</span>
+    </div>
+  </div>
+</section>
+{% endblock %}

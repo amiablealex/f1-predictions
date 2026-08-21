@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Admin</h1>
+<div class="row row--space">
+  <h1 style="margin:0;">Admin</h1>
+  <a href="{{ url_for('admin.usage_metrics') }}" class="btn btn--small btn--secondary">Metrics</a>
+</div>
 
 <section class="card">
   <h3>Worker triggers</h3>

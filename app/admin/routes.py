@@ -54,6 +54,18 @@ def dashboard():
     )
 
 
+@admin_bp.route("/metrics")
+@login_required
+@admin_required
+def usage_metrics():
+    from app.admin.metrics import collect_metrics
+    return render_template(
+        "admin/metrics.html",
+        m=collect_metrics(current_app.config["F1_SEASON"]),
+        title="Metrics",
+    )
+
+
 # =============================================================================
 # Worker triggers (run inline — useful when the worker process is down or
 # you want to force a refresh without waiting for the next interval)

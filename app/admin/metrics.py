@@ -37,7 +37,7 @@ from app.models.prediction import (
     Top3SprintPrediction,
     Top10Prediction,
 )
-from app.models.round import Round, RoundState, Session, SessionStatus
+from app.models.round import Round, RoundState, Session, SessionStatus, SessionType
 from app.models.user import User
 
 # Every table carrying (user_id, round_id, submitted_at).
@@ -178,8 +178,15 @@ def participation_by_round(activity: list[Activity], rounds: list[Round]) -> lis
 
     "Eligible" = registered before the deadline. "Partial" = submitted
     fewer rows than the fullest submission for that round, which avoids
-    hard-coding an expected row count per weekend type.
+    hard-coding an expected row count per weekend type. "New" = users
+    making their first-ever submission, so a signup wave doesn't read as
+    engagement.
+
+    Rounds whose deadline hasn't passed and which have no activity are
+    omitted — otherwise every future round shows the full user base as
+    eligible against zero submissions.
     """
+    now = _utcnow()
     signups = sorted(
         ts for ts in (
             _aware(t) for (t,) in db.session.execute(select(User.created_at)).all()
@@ -190,23 +197,38 @@ def participation_by_round(activity: list[Activity], rounds: list[Round]) -> lis
     for a in activity:
         by_round[a.round_id].append(a)
 
+    # Each user's first round, so we can split new from returning.
+    round_numbers = {r.id: r.round_number for r in rounds}
+    first_round: dict[int, int] = {}
+    for a in activity:
+        n = round_numbers.get(a.round_id)
+        if n is None:
+            continue
+        if a.user_id not in first_round or n < first_round[a.user_id]:
+            first_round[a.user_id] = n
+
     out = []
     for r in rounds:
         deadline = _aware(r.predictions_deadline)
         rows = by_round.get(r.id, [])
-        if deadline is None:
-            eligible = 0
-        else:
-            eligible = bisect_right(signups, deadline)
+        is_closed = deadline is not None and deadline < now
+        if not is_closed and not rows:
+            continue
 
-        submitted = len({a.user_id for a in rows})
+        eligible = bisect_right(signups, deadline) if deadline is not None else 0
+        user_ids = {a.user_id for a in rows}
+        submitted = len(user_ids)
+        new = sum(1 for uid in user_ids if first_round.get(uid) == r.round_number)
         expected = max((a.row_count for a in rows), default=0)
         partial = sum(1 for a in rows if a.row_count < expected)
 
         out.append({
             "round": r,
+            "is_closed": is_closed,
             "eligible": eligible,
             "submitted": submitted,
+            "new": new,
+            "returning": submitted - new,
             "pct": round(100 * submitted / eligible) if eligible else 0,
             "partial": partial,
             "expected_rows": expected,
@@ -311,7 +333,7 @@ def attention_lists(activity: list[Activity], rounds: list[Round]) -> dict:
 
     warm_cutoff = _utcnow() - timedelta(days=WARM_LOGIN_DAYS)
 
-    lapsed, warm_inactive, never, no_league = [], [], [], []
+    lapsed, warm_inactive, never, no_league, void = [], [], [], [], []
     for u in users:
         last_login = _aware(u.last_login_at)
         if u.id not in predicted_ever:
@@ -323,12 +345,17 @@ def attention_lists(activity: list[Activity], rounds: list[Round]) -> dict:
                 warm_inactive.append(u)
         if u.id not in with_league:
             no_league.append(u)
+            # Predicting with no league means no leaderboard and no
+            # comparison view — submitting into the void.
+            if u.id in predicted_ever:
+                void.append(u)
 
     return {
         "lapsed": lapsed,
         "warm_inactive": warm_inactive,
         "never_predicted": never,
         "no_league": no_league,
+        "predicted_no_league": void,
         "latest_round": latest,
     }
 
@@ -394,6 +421,9 @@ def data_health(season: int, rounds: list[Round]) -> dict:
                 Session.round_id.in_(round_ids),
                 Session.status == SessionStatus.COMPLETED,
                 Session.scored_at.is_(None),
+                # Sprint quali never triggers a reveal phase of its own,
+                # so a null scored_at there is expected, not a failure.
+                Session.session_type != SessionType.SPRINT_QUALI,
             )
         ) or 0
 
