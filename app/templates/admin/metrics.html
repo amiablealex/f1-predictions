@@ -141,36 +141,65 @@
 
 <section class="card">
   <h3>Users ({{ m.users|length }})</h3>
-  <div class="metrics-scroll">
-    <table class="metrics-table">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th class="metrics-table__num">Joined</th>
-          <th class="metrics-table__num">Rnds</th>
-          <th class="metrics-table__num">Streak</th>
-          <th class="metrics-table__num">Last</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in m.users %}
-          <tr>
-            <td>
-              {{ row.user.username }}
-              {% if row.user.is_admin %}<span class="pill pill--status-completed">admin</span>{% endif %}
-              {% if row.user.is_contributor %}<span class="pill pill--status-pending">contributor</span>{% endif %}
-            </td>
-            <td class="metrics-table__num tabular muted">{{ row.user.created_at.strftime('%d %b %y') }}</td>
-            <td class="metrics-table__num tabular">{{ row.rounds_predicted }}</td>
-            <td class="metrics-table__num tabular">{{ row.streak or '' }}</td>
-            <td class="metrics-table__num tabular muted">
-              {{ row.last_round if row.last_round is not none else '—' }}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <p class="small muted">Most engaged first.</p>
+  {% for row in m.users %}
+    <div class="admin-user-row">
+      <div class="admin-user-row__main">
+        <div class="admin-user-row__name">
+          {{ row.user.username }}
+          <button type="button" class="tooltip-trigger"
+                  aria-label="Show email" aria-expanded="false"
+                  data-tooltip="{{ row.user.email }}">i</button>
+        </div>
+        <div class="xs muted tabular">
+          {{ row.rounds_predicted }} rnd{{ '' if row.rounds_predicted == 1 else 's' }}
+          {% if row.streak %}· streak {{ row.streak }}{% endif %}
+          {% if row.last_round is not none %}· last R{{ row.last_round }}{% endif %}
+          · joined {{ row.user.created_at.strftime('%d %b %y') }}
+        </div>
+        <div class="admin-user-row__tags">
+          {% if row.user.is_admin %}<span class="pill pill--status-completed">admin</span>{% endif %}
+          {% if row.user.is_contributor %}<span class="pill pill--status-pending">contributor</span>{% endif %}
+        </div>
+      </div>
+      <div class="admin-user-row__actions">
+        <form method="post" action="{{ url_for('admin.user_contributor_toggle', user_id=row.user.id) }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit"
+                  class="btn btn--small admin-toggle {{ 'btn--primary' if row.user.is_contributor else 'btn--secondary' }}">
+            Contributor
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('admin.issue_password_reset', user_id=row.user.id) }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary admin-reset">Reset</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h3>Leagues ({{ m.leagues|length }})</h3>
+  <p class="small muted">
+    Aggregate only — leagues stay private to their members.
+  </p>
+  {% for row in m.leagues %}
+    <div class="row row--space" style="padding:6px 0;border-bottom:1px solid var(--c-border);">
+      <div>
+        <div>{{ row.league.name }}</div>
+        <div class="xs muted tabular">
+          {{ row.league.invite_code }} · created {{ row.league.created_at.strftime('%d %b %y') }}
+        </div>
+      </div>
+      <span class="pill {{ 'pill--p0' if not row.active_members else 'pill--p2' }} tabular">
+        {{ row.active_members }} / {{ row.members }}
+      </span>
+    </div>
+  {% endfor %}
+  <p class="xs muted" style="margin-bottom:0;">
+    Pill shows members who have ever predicted, over total members.
+  </p>
 </section>
 
 {% set h = m.health %}

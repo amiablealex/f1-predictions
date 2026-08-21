@@ -394,6 +394,32 @@ def user_rows(activity: list[Activity], rounds: list[Round]) -> list[dict]:
             "last_round": last_round,
             "last_submitted_at": last_seen.get(u.id),
         })
+    # Engagement first — the point of this page is who is actually playing.
+    # Flip to `r["user"].username.lower()` alone for an alphabetical roster.
+    out.sort(key=lambda r: (-r["rounds_predicted"], -r["streak"], r["user"].username.lower()))
+    return out
+
+
+def league_rows(activity: list[Activity]) -> list[dict]:
+    """Leagues with membership and how many of those members ever predicted.
+
+    Admins deliberately cannot open leagues they aren't in, so this is
+    aggregate only — enough to spot a dead league without exposing its
+    contents.
+    """
+    predicted_ever = {a.user_id for a in activity}
+    leagues = list(db.session.execute(
+        select(League).order_by(League.created_at.desc())
+    ).scalars())
+
+    out = []
+    for lg in leagues:
+        member_ids = [m.user_id for m in lg.memberships]
+        out.append({
+            "league": lg,
+            "members": len(member_ids),
+            "active_members": sum(1 for uid in member_ids if uid in predicted_ever),
+        })
     return out
 
 
@@ -463,5 +489,6 @@ def collect_metrics(season: int) -> dict:
         "timing": submission_timing(season_activity, rounds),
         "attention": attention_lists(season_activity, rounds),
         "users": user_rows(season_activity, rounds),
+        "leagues": league_rows(season_activity),
         "health": data_health(season, rounds),
     }

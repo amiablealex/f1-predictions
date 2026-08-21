@@ -44,13 +44,10 @@ def dashboard():
         .order_by(Round.round_number.asc())
         .all()
     )
-    leagues = db.session.query(League).order_by(League.created_at.desc()).all()
-    users = db.session.query(User).order_by(User.username.asc()).all()
     bare = FlaskForm()
     return render_template(
         "admin/dashboard.html",
-        rounds=rounds, leagues=leagues, users=users,
-        bare_csrf=bare, title="Admin",
+        rounds=rounds, bare_csrf=bare, title="Admin",
     )
 
 
@@ -62,8 +59,10 @@ def usage_metrics():
     return render_template(
         "admin/metrics.html",
         m=collect_metrics(current_app.config["F1_SEASON"]),
+        bare_csrf=FlaskForm(),
         title="Metrics",
     )
+
 
 
 # =============================================================================
