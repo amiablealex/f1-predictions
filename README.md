@@ -27,13 +27,13 @@ A small Flask app for a friend-group F1 predictions league. Predict the top 10, 
 | Templating | Jinja2 |
 | Frontend | Hand-written CSS, vanilla JS, HTMX where useful (no framework) |
 | Server | gunicorn |
-| Scheduler | APScheduler (separate worker process) |
+| Scheduler | Railway cron (production); APScheduler for local dev |
 | Data source | [Jolpica F1 API](https://github.com/jolpica/jolpica-f1) (Ergast successor) |
 | Email | [Resend](https://resend.com) — password reset only |
-| Hosting | [Railway](https://railway.app) (web + worker + Postgres) |
+| Hosting | [Railway](https://railway.app) (web + two cron services + Postgres) |
 | Local dev | Raspberry Pi 4 with local Postgres |
 
-Two services share one database. The **web** service serves the UI via gunicorn. The **worker** service runs scheduled jobs — schedule sync, results polling, deadline lock, scoring — via APScheduler. Both read from the same Postgres instance. Scoring is a pure-function engine with dense unit-test coverage.
+The **web** service serves the UI via gunicorn. Scheduled jobs (session state transitions, deadline lock, results polling, scoring, schedule and driver sync) are plain functions in `worker/jobs.py`. In production they run as Railway cron services that execute one pass and exit; locally, `worker/scheduler.py` runs the same jobs on a loop via APScheduler. Everything shares one Postgres instance. Scoring is a pure-function engine with dense unit-test coverage.
 
 ## Run it locally
 
@@ -58,9 +58,27 @@ flask --app wsgi db upgrade
 # Run web + worker in two terminals
 flask --app wsgi run --port 5000
 python -m worker.scheduler
+
+# Or run a single worker pass, as production does
+python -m worker.run_once frequent   # state, deadline lock, results
+python -m worker.run_once sync       # schedule + drivers
+
 ```
 
 Tests: `pytest`.
+
+## Deployment
+
+Railway, auto-deploying from `main`. Services are configured in the Railway dashboard; there is no Procfile or `railway.toml`. Builds use Railpack, with Python pinned in `.python-version`.
+
+| Service | Start command | Schedule | Notes |
+|---|---|---|---|
+| web | `gunicorn wsgi:app --workers 1 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT` | — | Pre-deploy: `flask db upgrade`. Serverless (sleeps when idle). |
+| cron-frequent | `python -m worker.run_once frequent` | `*/5 * * * *` | Restart policy: Never. |
+| cron-sync | `python -m worker.run_once sync` | `0 */12 * * *` | Restart policy: Never. |
+| Postgres | — | — | Shared by all services. |
+
+Cron schedules are UTC and not minute-precise. Deadline lock and results polling can lag by a few minutes.
 
 ## Customising
 
@@ -70,8 +88,8 @@ Almost everything tweakable lives in `app/config.py` under `Config`:
 |---|---|
 | `SCORING_DEFAULTS` | Points for every prediction type, including all eight specials. Snapshotted into `RoundScoringConfig` when a round is created, so changing values affects future rounds only — past leaderboards stay frozen. |
 | `DEADLINE_OFFSET_MINUTES` | How many minutes before the first scoring session predictions lock. Default 60. |
-| `RESULTS_POLL_INTERVAL_MINUTES` | How often the worker checks Jolpica for pending results. Default 5. |
-| `SCHEDULE_SYNC_INTERVAL_HOURS` | How often the worker re-pulls the season schedule. Default 12. |
+| `RESULTS_POLL_INTERVAL_MINUTES` | How often the local scheduler checks Jolpica for pending results. Default 5. In production the `cron-frequent` schedule controls this. |
+| `SCHEDULE_SYNC_INTERVAL_HOURS` | How often the local scheduler re-pulls the season schedule. Default 12. In production the `cron-sync` schedule controls this. |
 | `RESULTS_PENDING_TIMEOUT_HOURS` | After how long a still-pending session logs a warning for admin attention. Default 6. |
 | `SESSION_DURATION_MINUTES` | Estimated session lengths used to transition sessions from `in_progress` to `pending_results`. |
 | `JOLPICA_BASE_URL` | Override the Jolpica endpoint if mirroring or testing against a different instance. |

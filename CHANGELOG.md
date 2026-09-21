@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Worker runs as two Railway cron services (`worker.run_once frequent` every 5 min, `worker.run_once sync` every 12 h) instead of a long-running APScheduler process. Deadline lock and results polling can lag by a few minutes.
+- Web service runs one gunicorn worker with four threads and sleeps when idle.
+- Migrations run as a Railway pre-deploy command instead of in the web start command.
+- Builds use Railpack; Python pinned via `.python-version`.
+
+### Added
+- `worker/run_once.py`: single-pass worker entry point for cron.
+
+### Removed
+- `Procfile` and `railway.toml`. Railway Config as Code is deprecated; service settings live in the dashboard.
+
 ## [0.10.0] — 2026-05-14
 
 ### Added
