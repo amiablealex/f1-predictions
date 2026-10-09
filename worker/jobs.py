@@ -183,8 +183,9 @@ def session_state_transitions_job(app: Flask, client: JolpicaClient) -> None:
         for round_obj in {s.round for s in sessions}:
             update_round_state(db.session, round_obj)
 
-        if changed:
-            db.session.commit()
+        # Commit unconditionally: a round roll-up can change even when no
+        # session did this tick (e.g. after an admin data fix).
+        db.session.commit()
 
 
 # =============================================================================

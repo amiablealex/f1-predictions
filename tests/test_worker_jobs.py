@@ -360,6 +360,23 @@ def test_session_state_transitions(app, db, monkeypatch):
         assert refreshed.status == SessionStatus.PENDING_RESULTS
 
 
+def test_session_state_transitions_commits_round_rollup_without_session_change(app, db):
+    """All scoring sessions complete but round left IN_PROGRESS: the job
+    must persist the roll-up even though no session status moves."""
+    rd = upsert_round_with_sessions(db.session, _make_standard_round())
+    for s in rd.sessions:
+        s.status = SessionStatus.COMPLETED
+    rd.state = RoundState.IN_PROGRESS
+    db.session.commit()
+    round_id = rd.id
+
+    session_state_transitions_job(app, FakeJolpicaClient())
+
+    with app.app_context():
+        _db.session.expire_all()
+        assert _db.session.get(Round, round_id).state == RoundState.COMPLETED
+
+
 # =============================================================================
 # Deadline lock
 # =============================================================================
