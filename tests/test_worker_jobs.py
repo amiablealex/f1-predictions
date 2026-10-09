@@ -210,6 +210,40 @@ def test_upsert_round_with_sprint_creates_four_sessions(app, db):
     assert rd.predictions_deadline == sq.scheduled_start - timedelta(minutes=60)
 
 
+def _standard_round_reusing(round_number: int) -> APIRound:
+    """A standard weekend that has taken over a sprint round's number."""
+    base = datetime(2026, 6, 1, 13, 0, tzinfo=timezone.utc)
+    return _make_standard_round(round_number=round_number, base=base)
+
+
+def test_upsert_round_removes_stale_sprint_sessions(app, db):
+    upsert_round_with_sessions(db.session, _make_sprint_round(round_number=2))
+    db.session.commit()
+
+    rd = upsert_round_with_sessions(db.session, _standard_round_reusing(2))
+    db.session.commit()
+
+    assert rd.weekend_type == WeekendType.STANDARD
+    assert {s.session_type for s in rd.sessions} == {SessionType.QUALIFYING, SessionType.RACE}
+    assert db.session.query(Session).count() == 2
+    quali = next(s for s in rd.sessions if s.session_type == SessionType.QUALIFYING)
+    assert rd.predictions_deadline == quali.scheduled_start - timedelta(minutes=60)
+
+
+def test_upsert_round_keeps_started_stale_sprint_session(app, db):
+    rd = upsert_round_with_sessions(db.session, _make_sprint_round(round_number=2))
+    sq = next(s for s in rd.sessions if s.session_type == SessionType.SPRINT_QUALI)
+    sq.status = SessionStatus.COMPLETED
+    db.session.commit()
+
+    rd = upsert_round_with_sessions(db.session, _standard_round_reusing(2))
+    db.session.commit()
+
+    assert {s.session_type for s in rd.sessions} == {
+        SessionType.SPRINT_QUALI, SessionType.QUALIFYING, SessionType.RACE,
+    }
+
+
 # =============================================================================
 # Driver upsert
 # =============================================================================

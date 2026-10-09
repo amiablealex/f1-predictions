@@ -295,6 +295,24 @@ def upsert_round_with_sessions(db: DbSession, api_round: APIRound) -> Round:
             if sess.status == SessionStatus.UPCOMING:
                 sess.scheduled_start = api_sess.scheduled_start
 
+    # Drop sprint sessions the schedule no longer lists. Happens when the
+    # calendar is renumbered and a sprint round's number is reused by a
+    # standard weekend; left in place they hold the round IN_PROGRESS.
+    # Sprint types only: the parser omits any session whose time isn't
+    # published yet, so absence of quali/race isn't a reliable signal.
+    if not api_round.has_sprint:
+        for st in (SessionType.SPRINT_QUALI, SessionType.SPRINT_RACE):
+            stale = existing_by_type.get(st)
+            if stale is None:
+                continue
+            if stale.status == SessionStatus.UPCOMING:
+                rd.sessions.remove(stale)
+                log.info("schedule: removed stale %s from round %d/%d",
+                         st.value, rd.season, rd.round_number)
+            else:
+                log.warning("schedule: stale %s on round %d/%d is %s — admin investigate",
+                            st.value, rd.season, rd.round_number, stale.status.value)
+
     # Recompute predictions deadline from the earliest scoring session.
     scoring_sessions = [s for s in rd.sessions if s.session_type in _SCORING_SESSION_TYPES]
     if scoring_sessions:
