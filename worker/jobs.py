@@ -337,9 +337,12 @@ def _fetch_and_ingest_session(client: JolpicaClient, round_obj: Round, session_o
         refs = {e.driver_ref for e in api_results}
         drivers = _drivers_by_ref(refs)
         ingest_race_results(db.session, session_obj, api_results, drivers)
+    elif session_obj.session_type == SessionType.SPRINT_QUALI:
+        # Deadline-only, nothing to fetch. Only lands here via the admin
+        # refresh button; complete it again rather than leave it pending.
+        session_obj.status = SessionStatus.COMPLETED
+        session_obj.results_fetched_at = _utcnow()
     else:
-        # SPRINT_QUALI is deadline-only and never enters PENDING_RESULTS,
-        # so this branch shouldn't be reached. Log if it ever is.
         log.warning("Unexpected session type for results poll: %s", session_obj.session_type)
 
 
@@ -410,17 +413,16 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
         log.error("phase_scoring: round %d has no scoring config", round_id)
         return
 
-    # If SPRINT phase, both sprint sessions need to be completed for the
-    # output to be meaningful.
+    # SPRINT phase scores sprint race results only. Sprint quali is
+    # deadline-only and never scored, so its status doesn't gate this.
     sessions_by_type = {s.session_type: s for s in round_obj.sessions}
     if phase == ScoringPhase.SPRINT:
-        sq = sessions_by_type.get(SessionType.SPRINT_QUALI)
         sr = sessions_by_type.get(SessionType.SPRINT_RACE)
-        if sq is None or sr is None:
+        if sr is None:
             log.warning("phase_scoring: SPRINT phase on a non-sprint round; skipping")
             return
-        if sq.status != SessionStatus.COMPLETED or sr.status != SessionStatus.COMPLETED:
-            log.info("phase_scoring: SPRINT phase waiting for both sprint sessions to complete")
+        if sr.status != SessionStatus.COMPLETED:
+            log.info("phase_scoring: SPRINT phase waiting for sprint race to complete")
             return
 
     # Find every user who has any prediction for this round.

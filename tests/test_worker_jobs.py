@@ -30,6 +30,7 @@ from app.models.prediction import (
     PredictionScore,
     PredictionType,
     Top10Prediction,
+    Top3SprintPrediction,
 )
 from app.models.round import (
     Round,
@@ -50,6 +51,7 @@ from worker.ingest import (
 from worker.jobs import (
     deadline_lock_job,
     phase_scoring_job,
+    results_poll_job,
     schedule_sync_job,
     session_state_transitions_job,
 )
@@ -542,3 +544,54 @@ def test_phase_scoring_replaces_previous_scores(app, db, make_user):
         ).all()
         assert len(scores) == 1
         assert scores[0].points == 10
+
+
+# =============================================================================
+# Sprint quali is deadline-only
+# =============================================================================
+
+
+def _sprint_round_with_sprint_result(db, user, sq_status):
+    rd = upsert_round_with_sessions(db.session, _make_sprint_round())
+    drivers_map = upsert_drivers(db.session, [_api_driver("d1", "D1", 1)])
+    db.session.add(RoundDriver(round_id=rd.id, car_number=1, expected_driver_id=drivers_map["d1"].id))
+    db.session.add(Top3SprintPrediction(
+        user_id=user.id, round_id=rd.id, position=1,
+        predicted_driver_id=drivers_map["d1"].id,
+    ))
+    sq = next(s for s in rd.sessions if s.session_type == SessionType.SPRINT_QUALI)
+    sq.status = sq_status
+    db.session.commit()
+    sr = next(s for s in rd.sessions if s.session_type == SessionType.SPRINT_RACE)
+    ingest_race_results(
+        db.session, sr, [APIRaceEntry(1, 1, "d1", "C", "Finished", True, False)], drivers_map,
+    )
+    db.session.commit()
+    return rd, sq
+
+
+def test_sprint_phase_scores_without_completed_sprint_quali(app, db, make_user):
+    user = make_user()
+    rd, _ = _sprint_round_with_sprint_result(db, user, SessionStatus.PENDING_RESULTS)
+
+    phase_scoring_job(app, rd.id, ScoringPhase.SPRINT)
+
+    with app.app_context():
+        p1 = _db.session.query(PredictionScore).filter_by(
+            user_id=user.id, round_id=rd.id, kind=PredictionType.SPRINT_TOP3, position=1,
+        ).one()
+        assert p1.points > 0
+
+
+def test_results_poll_completes_refreshed_sprint_quali(app, db, make_user):
+    user = make_user()
+    rd, sq = _sprint_round_with_sprint_result(db, user, SessionStatus.PENDING_RESULTS)
+    sq_id = sq.id
+
+    results_poll_job(app, FakeJolpicaClient())
+
+    with app.app_context():
+        _db.session.expire_all()
+        refreshed = _db.session.get(Session, sq_id)
+        assert refreshed.status == SessionStatus.COMPLETED
+        assert refreshed.results_fetched_at is not None
