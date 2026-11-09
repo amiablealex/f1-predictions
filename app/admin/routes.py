@@ -7,22 +7,27 @@ from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from flask_wtf import FlaskForm
+from sqlalchemy.orm import selectinload
 
-from app.api.jolpica import build_default_client
+from app.api.jolpica import build_default_client, format_lap_time, parse_lap_time
 from app.extensions import db
 from app.models.league import League
 from app.models.prediction import PredictionScore
-from app.models.round import Round, RoundState, ScoringPhase, Session, SessionStatus
+from app.models.round import Round, RoundState, ScoringPhase, Session, SessionStatus, SessionType
+from app.scoring.provisional import describe as describe_missing
+from app.scoring.provisional import missing_inputs
 from app.models.user import PasswordResetToken, User
 from app.utils import admin_required
 from worker.ingest import session_triggers_phase
 from worker.jobs import (
     deadline_lock_job,
     driver_master_sync_job,
+    finalise_session,
     phase_scoring_job,
+    reassess_session,
     results_poll_job,
     run_full_pipeline,
     schedule_sync_job,
@@ -40,15 +45,35 @@ log = logging.getLogger(__name__)
 def dashboard():
     rounds = (
         db.session.query(Round)
+        .options(selectinload(Round.sessions))
         .filter(Round.season == current_app.config["F1_SEASON"])
         .order_by(Round.round_number.asc())
         .all()
     )
-    bare = FlaskForm()
     return render_template(
         "admin/dashboard.html",
-        rounds=rounds, bare_csrf=bare, title="Admin",
+        rounds=rounds, attention=_needs_attention(rounds),
+        bare_csrf=FlaskForm(), title="Admin",
     )
+
+
+def _needs_attention(rounds: list[Round]) -> list[tuple[Round, Session, str]]:
+    """Sessions the admin may want to act on, oldest first."""
+    out: list[tuple[Round, Session, str]] = []
+    for r in rounds:
+        for s in r.sessions:
+            if s.status == SessionStatus.PROVISIONAL:
+                reason = f"provisional · missing {describe_missing(missing_inputs(s))}"
+            elif s.status == SessionStatus.PENDING_RESULTS:
+                reason = "awaiting results"
+            elif (s.session_type == SessionType.QUALIFYING
+                  and s.status == SessionStatus.COMPLETED
+                  and s.pole_time_ms is None):
+                reason = "no pole time"
+            else:
+                continue
+            out.append((r, s, reason))
+    return out
 
 
 @admin_bp.route("/metrics")
@@ -142,8 +167,48 @@ def trigger_deadline_lock():
 
 
 # =============================================================================
-# Per-round actions
+# Per-round page + actions. Every action returns to the round page.
 # =============================================================================
+
+
+def _round_or_404(round_id: int) -> Round:
+    rd = db.session.get(Round, round_id)
+    if rd is None:
+        abort(404)
+    return rd
+
+
+def _session_or_404(round_id: int, session_id: int) -> Session:
+    s = db.session.get(Session, session_id)
+    if s is None or s.round_id != round_id:
+        abort(404)
+    return s
+
+
+def _back(round_id: int):
+    return redirect(url_for("admin.round_detail", round_id=round_id))
+
+
+_RESULT_SESSION_TYPES = (SessionType.QUALIFYING, SessionType.SPRINT_RACE, SessionType.RACE)
+
+
+@admin_bp.route("/round/<int:round_id>")
+@login_required
+@admin_required
+def round_detail(round_id: int):
+    rd = _round_or_404(round_id)
+    missing = {
+        s.id: describe_missing(missing_inputs(s))
+        for s in rd.sessions
+        if s.session_type in _RESULT_SESSION_TYPES
+        and s.status in (SessionStatus.PROVISIONAL, SessionStatus.COMPLETED)
+    }
+    quali = next((s for s in rd.sessions if s.session_type == SessionType.QUALIFYING), None)
+    return render_template(
+        "admin/round.html",
+        rd=rd, quali=quali, missing=missing,
+        bare_csrf=FlaskForm(), title=f"Admin · R{rd.round_number}",
+    )
 
 
 @admin_bp.route("/round/<int:round_id>/lock-toggle", methods=["POST"])
@@ -152,16 +217,11 @@ def trigger_deadline_lock():
 def round_lock_toggle(round_id: int):
     if not FlaskForm().validate_on_submit():
         abort(400)
-    rd = db.session.get(Round, round_id)
-    if rd is None:
-        abort(404)
+    rd = _round_or_404(round_id)
     rd.predictions_locked = not rd.predictions_locked
     db.session.commit()
-    flash(
-        f"Round {rd.round_number}: predictions {'LOCKED' if rd.predictions_locked else 'UNLOCKED'}.",
-        "info",
-    )
-    return redirect(url_for("admin.dashboard"))
+    flash(f"Predictions {'locked' if rd.predictions_locked else 'unlocked'}.", "info")
+    return _back(round_id)
 
 
 @admin_bp.route("/round/<int:round_id>/refresh-session/<int:session_id>", methods=["POST"])
@@ -169,37 +229,77 @@ def round_lock_toggle(round_id: int):
 @admin_required
 def round_refresh_session(round_id: int, session_id: int):
     """Force a session back into pending_results so the next results poll
-    re-fetches it. Useful when the API has updated provisional results to
-    final results after stewards' decisions."""
+    re-fetches it. Useful when Jolpica has corrected or filled in data
+    after a session was completed."""
     if not FlaskForm().validate_on_submit():
         abort(400)
-    s = db.session.get(Session, session_id)
-    if s is None or s.round_id != round_id:
-        abort(404)
+    s = _session_or_404(round_id, session_id)
     s.status = SessionStatus.PENDING_RESULTS
     s.results_fetched_at = None
     s.scored_at = None
     db.session.commit()
-    flash(f"Session {s.session_type.value} marked pending; will re-fetch on next poll.", "info")
-    return redirect(url_for("admin.dashboard"))
+    flash(f"{s.session_type.value}: marked pending, re-fetches on the next poll.", "info")
+    return _back(round_id)
+
+
+@admin_bp.route("/round/<int:round_id>/finalise-session/<int:session_id>", methods=["POST"])
+@login_required
+@admin_required
+def round_finalise_session(round_id: int, session_id: int):
+    """Accept a provisional session's current data as final and re-score."""
+    if not FlaskForm().validate_on_submit():
+        abort(400)
+    s = _session_or_404(round_id, session_id)
+    if s.status != SessionStatus.PROVISIONAL:
+        flash(f"{s.session_type.value} is not provisional.", "error")
+        return _back(round_id)
+    finalise_session(current_app, s)
+    flash(f"{s.session_type.value}: finalised and re-scored.", "success")
+    return _back(round_id)
+
+
+# Sanity bounds for a manually-entered pole time.
+_POLE_MIN_MS = 40_000
+_POLE_MAX_MS = 180_000
+
+
+@admin_bp.route("/round/<int:round_id>/pole-time", methods=["POST"])
+@login_required
+@admin_required
+def round_set_pole_time(round_id: int):
+    """Manually set the pole time when Jolpica hasn't published quali times.
+
+    A time later published by Jolpica replaces it on the next re-fetch.
+    """
+    if not FlaskForm().validate_on_submit():
+        abort(400)
+    rd = _round_or_404(round_id)
+    quali = next((s for s in rd.sessions if s.session_type == SessionType.QUALIFYING), None)
+    if quali is None:
+        abort(404)
+    raw = (request.form.get("pole_time") or "").strip()
+    ms = parse_lap_time(raw)
+    if ms is None or not (_POLE_MIN_MS <= ms <= _POLE_MAX_MS):
+        flash(f"Couldn't read '{raw}' as a pole time. Use m:ss.mmm, e.g. 1:10.123.", "error")
+        return _back(round_id)
+    quali.pole_time_ms = ms
+    reassess_session(current_app, quali)
+    flash(f"Pole time set to {format_lap_time(ms)}; quali {quali.status.value}.", "success")
+    return _back(round_id)
 
 
 @admin_bp.route("/round/<int:round_id>/rescore", methods=["POST"])
 @login_required
 @admin_required
 def round_rescore(round_id: int):
-    """Re-run scoring for every phase that has completed sessions.
-
-    Idempotent — calls phase_scoring_job which replaces existing rows.
-    """
+    """Re-run scoring for every phase with a scored (provisional or
+    completed) session. Idempotent — replaces existing rows."""
     if not FlaskForm().validate_on_submit():
         abort(400)
-    rd = db.session.get(Round, round_id)
-    if rd is None:
-        abort(404)
+    rd = _round_or_404(round_id)
     triggered: list[str] = []
     for s in rd.sessions:
-        if s.status != SessionStatus.COMPLETED:
+        if s.status not in (SessionStatus.COMPLETED, SessionStatus.PROVISIONAL):
             continue
         phase = session_triggers_phase(s.session_type)
         if phase is None:
@@ -207,10 +307,10 @@ def round_rescore(round_id: int):
         phase_scoring_job(current_app, rd.id, phase)
         triggered.append(phase.value)
     flash(
-        f"Rescored phases: {', '.join(triggered) or 'none (no completed scoring sessions)'}.",
+        f"Re-scored phases: {', '.join(triggered) or 'none (nothing with results yet)'}.",
         "success",
     )
-    return redirect(url_for("admin.dashboard"))
+    return _back(round_id)
 
 
 # =============================================================================

@@ -111,6 +111,14 @@ class Config:
     SCHEDULE_SYNC_INTERVAL_HOURS = _env_int("SCHEDULE_SYNC_INTERVAL_HOURS", 12)
     RESULTS_PENDING_TIMEOUT_HOURS = _env_int("RESULTS_PENDING_TIMEOUT_HOURS", 6)
 
+    # Provisional results: score incomplete Jolpica data straight away and
+    # keep polling until it is complete. Off = the old behaviour (wait for
+    # complete data, accept partial after RESULTS_PENDING_TIMEOUT_HOURS).
+    PROVISIONAL_RESULTS_ENABLED = _env_bool("PROVISIONAL_RESULTS_ENABLED", True)
+    # Hours after session start when a provisional session is finalised
+    # with whatever data exists.
+    RESULTS_FINALISE_AFTER_HOURS = _env_int("RESULTS_FINALISE_AFTER_HOURS", 48)
+
     # Estimated session durations — used to transition status from
     # `in_progress` to `pending_results`.
     SESSION_DURATION_MINUTES = {

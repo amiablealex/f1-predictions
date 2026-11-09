@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="{{ url_for('admin.dashboard') }}" class="small muted">← Admin</a>
+<div class="row row--space" style="margin-top:var(--space-2);">
+  <h1 style="margin:0;">R{{ rd.round_number }} · {{ rd.gp_name }}</h1>
+  <a href="{{ url_for('rounds.view', season=rd.season, round_number=rd.round_number) }}" class="btn btn--small btn--secondary">View</a>
+</div>
+<p class="small muted">
+  {{ rd.weekend_type.value }} · {{ rd.state.value|replace('_', ' ') }}
+  · predictions {{ 'locked' if rd.predictions_locked else 'open' }}
+</p>
+
+<section class="card">
+  <div class="row row--space">
+    <h3 style="margin:0;">Round</h3>
+    <div class="row" style="gap:4px;">
+      <form method="post" action="{{ url_for('admin.round_lock_toggle', round_id=rd.id) }}" style="margin:0;">
+        {{ bare_csrf.hidden_tag() }}
+        <button type="submit" class="btn btn--small btn--secondary">{{ 'Unlock' if rd.predictions_locked else 'Lock' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('admin.round_rescore', round_id=rd.id) }}" style="margin:0;">
+        {{ bare_csrf.hidden_tag() }}
+        <button type="submit" class="btn btn--small btn--secondary">Re-score</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Sessions</h3>
+  {% for s in rd.sessions %}
+    <div class="admin-user-row">
+      <div class="admin-user-row__main">
+        <div class="admin-user-row__name" style="gap:6px;">
+          {{ s.session_type.value|replace('_', ' ')|capitalize }}
+          <span class="{{ s.status|session_status_class }}">{{ s.status|session_status_label }}</span>
+        </div>
+        <div class="xs muted">
+          {{ s.scheduled_start|local_time }}
+          {% if s.results_fetched_at %}· fetched {{ s.results_fetched_at|local_time('%a %H:%M') }}{% endif %}
+          {% if s.scored_at %}· scored {{ s.scored_at|local_time('%a %H:%M') }}{% endif %}
+        </div>
+        {% if missing.get(s.id) %}
+          <div class="xs muted">missing: {{ missing[s.id] }}</div>
+        {% endif %}
+      </div>
+      <div class="admin-user-row__actions">
+        {% if s.status.value == 'provisional' %}
+          <form method="post" action="{{ url_for('admin.round_finalise_session', round_id=rd.id, session_id=s.id) }}" style="margin:0;">
+            {{ bare_csrf.hidden_tag() }}
+            <button type="submit" class="btn btn--small btn--secondary">Finalise</button>
+          </form>
+        {% endif %}
+        {% if s.status.value in ('completed', 'pending_results', 'provisional') %}
+          <form method="post" action="{{ url_for('admin.round_refresh_session', round_id=rd.id, session_id=s.id) }}" style="margin:0;">
+            {{ bare_csrf.hidden_tag() }}
+            <button type="submit" class="btn btn--small btn--secondary">Refresh</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  <p class="xs muted" style="margin:var(--space-2) 0 0;">
+    Refresh re-fetches on the next poll. Finalise accepts provisional data as it stands.
+  </p>
+</section>
+
+{% if quali %}
+<section class="card">
+  <h3>Pole time</h3>
+  <p class="small muted" style="margin-top:0;">
+    Current: <span class="tabular">{{ quali.pole_time_ms|pole_time if quali.pole_time_ms else 'none' }}</span>.
+    Use when Jolpica has no quali times; a published time replaces it on re-fetch.
+  </p>
+  <form method="post" action="{{ url_for('admin.round_set_pole_time', round_id=rd.id) }}" class="row" style="gap:6px;margin:0;">
+    {{ bare_csrf.hidden_tag() }}
+    <input type="text" name="pole_time" inputmode="decimal" autocomplete="off"
+           placeholder="1:10.123" class="field__input tabular" style="flex:1 1 auto;min-width:0;">
+    <button type="submit" class="btn btn--small btn--primary">Save</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

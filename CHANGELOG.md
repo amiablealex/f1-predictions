@@ -2,7 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- Provisional results. Jolpica publishes in stages (finishing order first, grid, fastest lap, pit stops and quali times later), so any non-empty result set is now ingested and scored straight away. A session missing inputs goes `provisional`: picks that depend on the missing data are withheld (shown unscored, not 0) and the worker keeps polling, re-scoring only when the data changes. It completes once the data is whole, or 48 h after session start (`RESULTS_FINALISE_AFTER_HOURS`). `PROVISIONAL_RESULTS_ENABLED=false` restores the old gate.
+- Qualifying is checked for a pole time, and an admin can enter one manually when Jolpica has no quali times. A published time replaces it on re-fetch.
+- Admin round page (`/admin/round/<id>`) with session status, missing inputs, Refresh, Finalise and the pole-time form. The dashboard lists rounds with a "Needs attention" section; worker triggers are collapsed.
+- Leaderboard note when totals include provisional points.
+
 ### Changed
+- Round page status banners shortened and reworded for players: "Session live · points follow the result", "Awaiting official results", "Provisional points · may change".
+- Session pill reads "awaiting results" instead of "results pending"; new "provisional" pill and round-list status.
+- Race specials are computed from freshly queried results and pit stops rather than relationship collections.
 - Worker runs as two Railway cron services (`worker.run_once frequent` every 5 min, `worker.run_once sync` every 12 h) instead of a long-running APScheduler process. Deadline lock and results polling can lag by a few minutes.
 - Web service runs one gunicorn worker with four threads and sleeps when idle.
 - Migrations run as a Railway pre-deploy command instead of in the web start command.

@@ -20,7 +20,7 @@ from sqlalchemy import func
 from app.extensions import db
 from app.models.league import League, LeagueMembership
 from app.models.prediction import PredictionScore
-from app.models.round import Round, RoundState
+from app.models.round import Round, RoundState, Session, SessionStatus
 from app.models.user import User
 from app.utils import (
     assert_member,
@@ -87,6 +87,7 @@ def view(league_id: int):
         heatmap=heatmap,
         friend_landing=most_recent_visible_round(current_app.config["F1_SEASON"]),
         last_scored=last_scored,
+        provisional_note=_provisional_note(),
         title=f"{league.name} · Leaderboard",
     )
 
@@ -152,6 +153,29 @@ def _league_member_ids(league_id: int) -> list[int]:
         m.user_id for m in db.session.query(LeagueMembership)
         .filter_by(league_id=league_id).all()
     ]
+
+
+def _provisional_note() -> str | None:
+    """'Includes provisional points from Round X. These may change.' when
+    any scored round this season still has a provisional session."""
+    numbers = sorted({
+        n for (n,) in db.session.query(Round.round_number)
+        .join(Session, Session.round_id == Round.id)
+        .join(PredictionScore, PredictionScore.round_id == Round.id)
+        .filter(
+            Round.season == current_app.config["F1_SEASON"],
+            Session.status == SessionStatus.PROVISIONAL,
+        )
+        .distinct()
+        .all()
+    })
+    if not numbers:
+        return None
+    if len(numbers) == 1:
+        label = f"Round {numbers[0]}"
+    else:
+        label = "Rounds " + ", ".join(str(n) for n in numbers[:-1]) + f" and {numbers[-1]}"
+    return f"Includes provisional points from {label}. These may change."
 
 
 def _most_recent_scored_round() -> Round | None:

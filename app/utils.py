@@ -45,6 +45,7 @@ from app.round_display import (
     actual_places_gained_for_pick,
     actual_position_for_pick,
 )
+from app.scoring.provisional import withheld_for_session
 from app.specials import SPECIALS_BY_KEY
 from app.models.round import (
     Round,
@@ -475,6 +476,18 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         specials, special_outcomes,
     )
 
+    # Provisional sessions: hide the result cell for picks whose inputs are
+    # still missing — they have no score row either, so the row reads as
+    # unscored rather than showing a half-known result.
+    for sess_type in (SessionType.QUALIFYING, SessionType.RACE):
+        withheld = withheld_for_session(sessions.get(sess_type))
+        if withheld:
+            actuals = {k: v for k, v in actuals.items() if not withheld.covers(k[0])}
+            special_actuals = {
+                k: v for k, v in special_actuals.items()
+                if not withheld.covers(PredictionType.SPECIAL, k)
+            }
+
     contribution_actuals = _build_contribution_actuals(
         contribution_defs, contribution_preds, drivers_by_id,
     )
@@ -717,7 +730,8 @@ def session_status_label(status: SessionStatus | None) -> str:
     return {
         SessionStatus.UPCOMING: "scheduled",
         SessionStatus.IN_PROGRESS: "in progress",
-        SessionStatus.PENDING_RESULTS: "results pending",
+        SessionStatus.PENDING_RESULTS: "awaiting results",
+        SessionStatus.PROVISIONAL: "provisional",
         SessionStatus.COMPLETED: "completed",
     }.get(status, status.value)
 
@@ -792,6 +806,10 @@ def round_status_summary(round_obj: Round, now: datetime | None = None) -> tuple
     if round_obj.state == RoundState.COMPLETED:
         return ("completed", "pill pill--status-completed")
     if round_obj.state == RoundState.IN_PROGRESS:
+        statuses = {s.status for s in round_obj.sessions}
+        if (SessionStatus.PROVISIONAL in statuses
+                and not statuses & {SessionStatus.IN_PROGRESS, SessionStatus.PENDING_RESULTS}):
+            return ("provisional", "pill pill--status-provisional")
         return ("live", "pill pill--status-in-progress")
     if round_obj.predictions_locked:
         return ("locked", "pill pill--status-pending")

@@ -39,6 +39,7 @@ from app.models.prediction import (
 )
 from app.models.result import SessionResult
 from app.models.round import Round, RoundScoringConfig, ScoringPhase, Session, SessionType
+from app.scoring.provisional import Withheld
 
 
 # =============================================================================
@@ -610,10 +611,33 @@ def build_phase_scores(
     config: RoundScoringConfig,
     round_obj: Round,
     special_outcomes_by_key: dict[str, "SpecialOutcome"] | None = None,
+    withheld: "Withheld | None" = None,
 ) -> list[PredictionScore]:
-    """Top-level dispatch — call from the worker."""
-    if special_outcomes_by_key is None:
-        special_outcomes_by_key = {}
+    """Top-level dispatch — call from the worker.
+
+    `withheld` drops rows for picks whose inputs are still missing from a
+    provisional session, so they show as unscored rather than 0.
+    """
+    rows = _build_phase_scores(
+        user_id, round_id, phase, user_preds, sessions_by_type,
+        round_drivers, config, round_obj, special_outcomes_by_key or {},
+    )
+    if withheld:
+        rows = [r for r in rows if not withheld.covers_score(r)]
+    return rows
+
+
+def _build_phase_scores(
+    user_id: int,
+    round_id: int,
+    phase: ScoringPhase,
+    user_preds: UserPredictions,
+    sessions_by_type: dict[SessionType, Session],
+    round_drivers: list[RoundDriver],
+    config: RoundScoringConfig,
+    round_obj: Round,
+    special_outcomes_by_key: dict[str, "SpecialOutcome"],
+) -> list[PredictionScore]:
     if phase == ScoringPhase.SPRINT:
         return build_sprint_phase_scores(
             user_id, round_id, user_preds,

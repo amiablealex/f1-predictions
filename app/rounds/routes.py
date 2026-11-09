@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from flask import Blueprint, abort, current_app, redirect, render_template, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.prediction import PredictionScore
@@ -58,6 +59,7 @@ def _build_list_rows(season: int, user_id: int) -> list[RoundListEntry]:
     """
     rounds = (
         db.session.query(Round)
+        .options(selectinload(Round.sessions))
         .filter(Round.season == season,
                 Round.predictions_locked.is_(True))
         .order_by(Round.round_number.desc())

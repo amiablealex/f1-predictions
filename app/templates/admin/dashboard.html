@@ -5,38 +5,22 @@
   <a href="{{ url_for('admin.usage_metrics') }}" class="btn btn--small btn--secondary">Metrics</a>
 </div>
 
+{% if attention %}
 <section class="card">
-  <h3>Worker triggers</h3>
-  <p class="small muted">Run jobs inline (separate from the worker's own schedule).</p>
-  <div class="stack">
-    <form method="post" action="{{ url_for('admin.run_pipeline') }}">
-      {{ bare_csrf.hidden_tag() }}
-      <button type="submit" class="btn btn--primary btn--block">Run full pipeline</button>
-    </form>
-    <div class="row" style="gap:6px;flex-wrap:wrap;">
-      <form method="post" action="{{ url_for('admin.trigger_schedule_sync') }}" style="margin:0;">
-        {{ bare_csrf.hidden_tag() }}
-        <button type="submit" class="btn btn--small btn--secondary">Schedule sync</button>
-      </form>
-      <form method="post" action="{{ url_for('admin.trigger_driver_sync') }}" style="margin:0;">
-        {{ bare_csrf.hidden_tag() }}
-        <button type="submit" class="btn btn--small btn--secondary">Driver sync</button>
-      </form>
-      <form method="post" action="{{ url_for('admin.trigger_state_transitions') }}" style="margin:0;">
-        {{ bare_csrf.hidden_tag() }}
-        <button type="submit" class="btn btn--small btn--secondary">State transitions</button>
-      </form>
-      <form method="post" action="{{ url_for('admin.trigger_results_poll') }}" style="margin:0;">
-        {{ bare_csrf.hidden_tag() }}
-        <button type="submit" class="btn btn--small btn--secondary">Results poll</button>
-      </form>
-      <form method="post" action="{{ url_for('admin.trigger_deadline_lock') }}" style="margin:0;">
-        {{ bare_csrf.hidden_tag() }}
-        <button type="submit" class="btn btn--small btn--secondary">Deadline lock</button>
-      </form>
+  <h3>Needs attention</h3>
+  {% for r, s, reason in attention %}
+    <div class="admin-user-row">
+      <div class="admin-user-row__main">
+        <div class="admin-user-row__name">R{{ r.round_number }} · {{ s.session_type.value|replace('_', ' ')|capitalize }}</div>
+        <div class="small muted">{{ reason }}</div>
+      </div>
+      <div class="admin-user-row__actions">
+        <a href="{{ url_for('admin.round_detail', round_id=r.id) }}" class="btn btn--small btn--secondary">Manage</a>
+      </div>
     </div>
-  </div>
+  {% endfor %}
 </section>
+{% endif %}
 
 <section class="card">
   <h3>Rounds ({{ rounds|length }})</h3>
@@ -44,48 +28,53 @@
     <p class="muted">No rounds in the DB yet. Run schedule sync.</p>
   {% else %}
     {% for r in rounds %}
-      <div style="padding:8px 0;border-bottom:1px solid var(--c-border);">
-        <div class="row row--space">
-          <div>
-            <div>{{ r.round_number }}. {{ r.gp_name }}</div>
-            <div class="small muted">
-              {{ r.weekend_type.value }} · {{ r.state.value }}
-              {% if r.predictions_locked %}· locked{% endif %}
-            </div>
-          </div>
-          <div class="row" style="gap:4px;">
-            <form method="post" action="{{ url_for('admin.round_lock_toggle', round_id=r.id) }}" style="margin:0;">
-              {{ bare_csrf.hidden_tag() }}
-              <button type="submit" class="btn btn--small btn--secondary">
-                {{ 'Unlock' if r.predictions_locked else 'Lock' }}
-              </button>
-            </form>
-            <form method="post" action="{{ url_for('admin.round_rescore', round_id=r.id) }}" style="margin:0;">
-              {{ bare_csrf.hidden_tag() }}
-              <button type="submit" class="btn btn--small btn--secondary">Re-score</button>
-            </form>
+      <div class="admin-user-row">
+        <div class="admin-user-row__main">
+          <div class="admin-user-row__name">{{ r.round_number }}. {{ r.gp_name }}</div>
+          <div class="small muted">
+            {{ r.weekend_type.value }} · {{ r.state.value|replace('_', ' ') }}{% if r.predictions_locked %} · locked{% endif %}
           </div>
         </div>
-
-        {% set refreshable = r.sessions | selectattr('status.value', 'in', ('completed', 'pending_results')) | list %}
-        {% if refreshable %}
-          <details class="admin-sessions">
-            <summary class="admin-sessions__summary">Sessions ({{ refreshable|length }})</summary>
-            <div class="admin-sessions__body">
-              {% for s in refreshable %}
-                <div class="row row--space xs muted" style="gap:8px;">
-                  <span class="tabular">{{ s.session_type.value }} · {{ s.status.value }}</span>
-                  <form method="post" action="{{ url_for('admin.round_refresh_session', round_id=r.id, session_id=s.id) }}" style="margin:0;">
-                    {{ bare_csrf.hidden_tag() }}
-                    <button type="submit" class="btn btn--small btn--secondary">Refresh</button>
-                  </form>
-                </div>
-              {% endfor %}
-            </div>
-          </details>
-        {% endif %}
+        <div class="admin-user-row__actions">
+          <a href="{{ url_for('admin.round_detail', round_id=r.id) }}" class="btn btn--small btn--secondary">Manage</a>
+        </div>
       </div>
     {% endfor %}
   {% endif %}
+</section>
+
+<section class="card">
+  <details class="admin-sessions">
+    <summary class="admin-sessions__summary">Worker triggers</summary>
+    <div class="admin-sessions__body stack">
+      <p class="small muted" style="margin:0;">Run jobs inline, outside the cron schedule.</p>
+      <form method="post" action="{{ url_for('admin.run_pipeline') }}" style="margin:0;">
+        {{ bare_csrf.hidden_tag() }}
+        <button type="submit" class="btn btn--primary btn--block">Run full pipeline</button>
+      </form>
+      <div class="row" style="gap:6px;flex-wrap:wrap;">
+        <form method="post" action="{{ url_for('admin.trigger_schedule_sync') }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">Schedule sync</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.trigger_driver_sync') }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">Driver sync</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.trigger_state_transitions') }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">State transitions</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.trigger_results_poll') }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">Results poll</button>
+        </form>
+        <form method="post" action="{{ url_for('admin.trigger_deadline_lock') }}" style="margin:0;">
+          {{ bare_csrf.hidden_tag() }}
+          <button type="submit" class="btn btn--small btn--secondary">Deadline lock</button>
+        </form>
+      </div>
+    </div>
+  </details>
 </section>
 {% endblock %}

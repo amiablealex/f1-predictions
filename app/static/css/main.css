@@ -394,6 +394,8 @@ p { margin: 0 0 var(--space-3) 0; }
 .pill--status-in-progress { background: rgba(184, 134, 44, 0.16); color: var(--c-status-in-progress); }
 .pill--status-pending     { background: rgba(138, 125, 82, 0.16); color: var(--c-status-pending); }
 .pill--status-completed   { background: rgba(79, 107, 58, 0.13);  color: var(--c-status-completed); }
+.pill--status-pending-results,
+.pill--status-provisional { background: rgba(138, 125, 82, 0.16); color: var(--c-status-pending); }
 
 /* ---- Friend-view context strip ---- */
 .friend-strip {

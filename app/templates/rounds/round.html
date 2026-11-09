@@ -71,18 +71,17 @@
   {% endif %}
 </div>
 
-{# Status banner: live during a session, pending while we wait on results #}
-{% set in_progress = sessions.values() | selectattr('status.value', 'equalto', 'in_progress') | list %}
-{% set pending = sessions.values() | selectattr('status.value', 'equalto', 'pending_results') | list %}
-{% if in_progress %}
+{# Status banner: one short line on where the round's results stand #}
+{% set statuses = sessions.values() | map(attribute='status.value') | list %}
+{% if 'in_progress' in statuses %}
   <div class="status-banner status-banner--live">
     <span class="status-banner__dot"></span>
-    Session in progress — points land once it's official.
+    Session live · points follow the result
   </div>
-{% elif pending %}
-  <div class="status-banner status-banner--pending">
-    Results pending. The worker checks every {{ config['RESULTS_POLL_INTERVAL_MINUTES'] }} minutes.
-  </div>
+{% elif 'pending_results' in statuses %}
+  <div class="status-banner status-banner--pending">Awaiting official results</div>
+{% elif 'provisional' in statuses %}
+  <div class="status-banner status-banner--pending">Provisional points · may change</div>
 {% endif %}
 
 {% if not state.is_locked and is_self %}

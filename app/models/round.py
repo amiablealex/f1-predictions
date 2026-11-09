@@ -43,6 +43,10 @@ class SessionStatus(str, enum.Enum):
     UPCOMING = "upcoming"
     IN_PROGRESS = "in_progress"
     PENDING_RESULTS = "pending_results"
+    # Results ingested and scored, but Jolpica's data is still incomplete
+    # (see app/scoring/provisional.py). The worker keeps polling until the
+    # data is complete or RESULTS_FINALISE_AFTER_HOURS passes.
+    PROVISIONAL = "provisional"
     COMPLETED = "completed"
 
 

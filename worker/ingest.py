@@ -442,7 +442,10 @@ def ingest_qualifying_results(
         if entry.position == 1 and entry.best_time_ms is not None:
             pole_time_ms = entry.best_time_ms
 
-    session.pole_time_ms = pole_time_ms
+    # Keep an existing pole time (e.g. entered by the admin) when Jolpica
+    # hasn't published quali times yet. A published time always wins.
+    if pole_time_ms is not None:
+        session.pole_time_ms = pole_time_ms
     session.results_fetched_at = datetime.now(timezone.utc)
     session.status = SessionStatus.COMPLETED
     db.flush()
@@ -620,7 +623,8 @@ def update_round_state(db: DbSession, round_obj: Round) -> None:
         return
     if all(s.status == SessionStatus.COMPLETED for s in scoring_sessions):
         round_obj.state = RoundState.COMPLETED
-    elif any(s.status in {SessionStatus.IN_PROGRESS, SessionStatus.PENDING_RESULTS, SessionStatus.COMPLETED}
+    elif any(s.status in {SessionStatus.IN_PROGRESS, SessionStatus.PENDING_RESULTS,
+                          SessionStatus.PROVISIONAL, SessionStatus.COMPLETED}
              for s in scoring_sessions):
         round_obj.state = RoundState.IN_PROGRESS
     # else: leave UPCOMING

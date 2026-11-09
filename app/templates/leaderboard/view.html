@@ -16,6 +16,10 @@
 {% set active_tab = view_kind %}
 {% include "leaderboard/_tabs.html" %}
 
+{% if provisional_note and view_kind != 'heatmap' %}
+  <div class="status-banner status-banner--pending">{{ provisional_note }}</div>
+{% endif %}
+
 {% if view_kind == 'heatmap' %}
   <section class="card heatmap-card">
     {% if not heatmap or not heatmap.rounds %}
