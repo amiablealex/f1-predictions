@@ -47,9 +47,6 @@ def create_app(config_class=None) -> Flask:
     from app.cli import seed_test_predictions
     app.cli.add_command(seed_test_predictions)
 
-    from app.cli import repair_seats
-    app.cli.add_command(repair_seats)
-
     return app
 
 

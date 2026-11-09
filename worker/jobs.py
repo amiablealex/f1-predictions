@@ -620,9 +620,7 @@ def _has_app_context() -> bool:
     return has_app_context()
 
 
-def _phase_scoring_inner(round_id: int, phase: ScoringPhase, commit: bool = True) -> None:
-    """`commit=False` flushes instead, for callers that own the
-    transaction (the seat-repair dry run rolls it back)."""
+def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
     round_obj = (
         db.session.query(Round)
         .options(
@@ -708,10 +706,7 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase, commit: bool = True
         if s is not None:
             s.scored_at = now
 
-    if commit:
-        db.session.commit()
-    else:
-        db.session.flush()
+    db.session.commit()
 
 
 def _user_ids_with_predictions(round_id: int) -> list[int]:

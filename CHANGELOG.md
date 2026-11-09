@@ -8,7 +8,7 @@
 - Admin round page (`/admin/round/<id>`) with session status, missing inputs, Refresh, Finalise and the pole-time form. The dashboard lists rounds with a "Needs attention" section; worker triggers are collapsed.
 - Leaderboard note when totals include provisional points.
 - Admin lineup editor on the round page: relist a seat under a different driver for this round or for the rest of the season. Picks follow the seat. An "Add driver" form creates a debutant Jolpica doesn't know yet; their Jolpica record claims it on first appearance (matched on family name). Locked rounds show who drove each seat.
-- `flask repair-seats`: one-off repair for lineups rewritten from results. Restores each played round's lineup from the first unplayed round, re-fetches results, recomputes specials and re-scores. Reports changed result rows, pit stops and special outcomes per round, and point changes by prediction type and by user. `--rounds` limits it to given rounds. Dry run unless `--apply`.
+- One-off `flask repair-seats` restored the 2026 lineups the worker had rewritten from results and re-scored the season against current Jolpica data (substitutions in R12–14 and R19–20, late penalties in R6, R7 and R9). Removed after use.
 - Round page footnote lists the round's stand-ins ("TSU for LAW (RB F1 Team)").
 - Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
