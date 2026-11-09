@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="row row--space">
-  <h1 style="margin:0;">Metrics</h1>
-  <a href="{{ url_for('admin.dashboard') }}" class="btn btn--small btn--secondary">Admin</a>
-</div>
+<a class="back-link" href="{{ url_for('admin.dashboard') }}">‹ Admin</a>
+<h1>Metrics</h1>
 
 {% set s = m.snapshot %}
 <section class="card">

@@ -128,14 +128,17 @@ def test_global_view_opted_out_banner(client, make_user, login, db):
     assert "opted out of the global leaderboard" in html
 
 
-def test_global_heatmap_and_h2h_render(client, login, db, trio):
+def test_global_is_total_only(client, login, db, trio):
     alice, bob, _ = trio
     rd = _round(db, 1)
     _score(db, alice, rd, 4)
     _score(db, bob, rd, 6)
     login()
     for view in ("total", "h2h", "heatmap"):
-        assert client.get(f"/leaderboard/global?view={view}").status_code == 200
+        html = client.get(f"/leaderboard/global?view={view}").get_data(as_text=True)
+        assert "leaderboard-tabs" not in html
+        assert "heatmap-card" not in html
+        assert "pprp" in html
 
 
 # --------------------------------------------------------------- landing page
@@ -206,6 +209,7 @@ def test_league_leaderboard_has_settings_and_share(client, make_user, login, db)
     html = client.get(f"/leaderboard/{league.id}").get_data(as_text=True)
     assert f"/leagues/{league.id}/settings" in html
     assert "data-share-league" in html
+    assert "leaderboard-tabs" in html
     assert client.get(f"/leagues/{league.id}/settings").status_code == 200
 
 
@@ -215,3 +219,11 @@ def test_settings_blocks_non_member(client, make_user, login, db):
     make_user()
     login()
     assert client.get(f"/leagues/{league.id}/settings").status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/leagues/join", "/leagues/new"])
+def test_league_forms_link_back(client, make_user, login, path):
+    make_user()
+    login()
+    html = client.get(path).get_data(as_text=True)
+    assert 'class="back-link" href="/leagues/"' in html

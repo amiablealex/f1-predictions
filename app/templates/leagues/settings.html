@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<a class="compare-back" href="{{ url_for('leaderboard.view', league_id=league.id) }}">‹ {{ league.name }}</a>
+<a class="back-link" href="{{ url_for('leaderboard.view', league_id=league.id) }}">‹ {{ league.name }}</a>
 <h1>Settings</h1>
 <p class="small muted">
   Invite code: <strong class="tabular">{{ league.invite_code }}</strong>

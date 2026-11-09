@@ -10,11 +10,13 @@
 - Admin lineup editor on the round page: relist a seat under a different driver for this round or for the rest of the season. Picks follow the seat. An "Add driver" form creates a debutant Jolpica doesn't know yet; their Jolpica record claims it on first appearance (matched on family name). Locked rounds show who drove each seat.
 - One-off `flask repair-seats` restored the 2026 lineups the worker had rewritten from results and re-scored the season against current Jolpica data (substitutions in R12–14 and R19–20, late penalties in R6, R7 and R9). Removed after use.
 - Round page footnote lists the round's stand-ins ("TSU for LAW (RB F1 Team)").
-- Global league of every player who opts in (default on, set at signup and in Account settings). Shows total, head-to-head and heatmap but not Compare; names only link through where you share a private league.
-- Leagues page lists Global and each private league with your position and an arrow for movement in the last scored round. The Leaderboard menu item is merged into it; league settings and Share invite sit on each leaderboard.
+- Global league of every player who opts in (default on, set at signup and in Account settings). Total points only; names only link through where you share a private league.
+- Leagues page lists Global and each private league with your position and an arrow for movement in the last scored round. The Leaderboard menu item is merged into it; share and settings icons sit beside each league's title.
+- Back links on Create league, Join league, the round page (to Results) and admin sub-pages.
 - Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
 ### Fixed
+- Heatmap: scrolled cells no longer show through the frozen name column.
 - Substitutions. Picks are seats, and a seat is now matched to whoever drove it by team (`app/seats.py`) instead of by car number, which follows the driver in F1. A pick of an ill or replaced driver scores their stand-in; a promotion between teams (RB driver to Red Bull, reserve into RB) resolves within each team.
 - The worker no longer rewrites a round's lineup from its first results. It added stand-ins as extra seats after the deadline and overwrote a promoted driver's team.
 - A debutant's results are no longer skipped: drivers missing from the master list are created from the result rows.

@@ -1,6 +1,6 @@
 """Leaderboard blueprint.
 
-Views per league (the virtual Global league reuses all but Compare):
+Views per league (the virtual Global league shows Total points only):
   - 'total' (default): cumulative points across the season + most recent
     round's score in a "Last" column.
   - 'h2h': count of rounds where each user was the top scorer in this
@@ -89,7 +89,7 @@ def _render_board(
     league: League | None,
 ):
     view_kind = request.args.get("view", "total")
-    if view_kind not in ("total", "h2h", "heatmap"):
+    if league is None or view_kind not in ("total", "h2h", "heatmap"):
         view_kind = "total"
 
     members_by_id = {u.id: u for u in db.session.query(User).filter(User.id.in_(member_ids)).all()}

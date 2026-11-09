@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
-<a class="compare-back" href="{{ url_for('leagues.index') }}">‹ Leagues</a>
-<h1>{{ board_name }}</h1>
+<a class="back-link" href="{{ url_for('leagues.index') }}">‹ Leagues</a>
+<div class="page-head">
+  <h1>{{ board_name }}</h1>
+  {% if league %}
+    <div class="page-head__actions">
+      <button type="button" class="icon-btn" data-share-league
+              data-share-url="{{ url_for('invite.landing', code=league.invite_code, _external=True) }}"
+              data-share-text="Join my F1 predictions league: "
+              aria-label="Share invite" title="Share invite">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.5M8.2 13.2l7.6 4.5"/></svg>
+      </button>
+      <a href="{{ url_for('leagues.settings', league_id=league.id) }}" class="icon-btn"
+         aria-label="League settings" title="League settings">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </a>
+    </div>
+  {% endif %}
+</div>
 
-{% if league %}
-  <div class="row" style="gap:8px;margin-bottom:1rem;">
-    <button type="button" class="btn btn--small btn--secondary" data-share-league
-            data-share-url="{{ url_for('invite.landing', code=league.invite_code, _external=True) }}"
-            data-share-text="Join my F1 predictions league: ">
-      Share invite
-    </button>
-    <a href="{{ url_for('leagues.settings', league_id=league.id) }}" class="btn btn--small btn--secondary">Settings</a>
-  </div>
-{% else %}
+{% if not league %}
   <p class="small muted">
     {% if current_user.show_on_global %}
       Don't want to appear here? <a href="{{ url_for('auth.account', _anchor='global-leaderboard') }}">Change it in settings</a>.
@@ -22,8 +29,10 @@
   </p>
 {% endif %}
 
-{% set active_tab = view_kind %}
-{% include "leaderboard/_tabs.html" %}
+{% if league %}
+  {% set active_tab = view_kind %}
+  {% include "leaderboard/_tabs.html" %}
+{% endif %}
 
 {% if provisional_note and view_kind != 'heatmap' %}
   <div class="status-banner status-banner--pending">{{ provisional_note }}</div>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<a href="{{ url_for('admin.dashboard') }}" class="small muted">← Admin</a>
-<div class="row row--space" style="margin-top:var(--space-2);">
+<a class="back-link" href="{{ url_for('admin.dashboard') }}">‹ Admin</a>
+<div class="row row--space">
   <h1 style="margin:0;">R{{ rd.round_number }} · {{ rd.gp_name }}</h1>
   <a href="{{ url_for('rounds.view', season=rd.season, round_number=rd.round_number) }}" class="btn btn--small btn--secondary">View</a>
 </div>

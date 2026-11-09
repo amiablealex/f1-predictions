@@ -12,7 +12,7 @@ A small Flask app for a friend-group F1 predictions league. Predict the top 10, 
 - Sprint weekends add sprint top 3
 - Per-round rotating bonuses keep every weekend different: a random driver wager, a head-to-head between two teammates, "who qualifies P-N?", plus two from a rotating bank of eight specials (first retirement, most pit stops, margin of victory, longest stint, and more)
 - Points reveal in phases — sprint, qualifying, race
-- League leaderboards: total points, head-to-head or heatmap, plus an opt-out global league of all players
+- League leaderboards: total points, head-to-head or heatmap, plus an opt-out global league (total points) of all players
 - Substitutions handled by seat: pick "Hamilton", points go to whoever drives car 44
 - Installable as a PWA on mobile
 
