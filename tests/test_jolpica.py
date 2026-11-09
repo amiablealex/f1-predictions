@@ -463,3 +463,33 @@ def test_get_pit_stops_empty_when_no_races():
     with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
         stops = _client().get_pit_stops(2026, 99)
     assert stops == []
+
+
+# =============================================================================
+# Repeated positions (Jolpica mid-edit) — 2026 R19 quali served two P8s
+# =============================================================================
+
+
+def _quali_row(pos, num, ref):
+    return {"position": str(pos), "number": str(num), "Driver": {"driverId": ref}, "Q1": "1:18.000"}
+
+
+def test_repeated_quali_position_raises_transient():
+    from app.api.exceptions import JolpicaTransientError
+    payload = {"MRData": {"RaceTable": {"Races": [{"QualifyingResults": [
+        _quali_row(7, 6, "hadjar"), _quali_row(8, 41, "lindblad"),
+        _quali_row(8, 30, "lawson"), _quali_row(9, 10, "gasly"),
+    ]}]}}}
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        with pytest.raises(JolpicaTransientError, match="position\\(s\\) 8 repeated"):
+            _client().get_qualifying_results(2026, 19)
+
+
+def test_repeated_race_position_raises_transient():
+    from app.api.exceptions import JolpicaTransientError
+    rows = [{"position": "1", "number": "3", "Driver": {"driverId": "max_verstappen"}, "status": "Finished"},
+            {"position": "1", "number": "44", "Driver": {"driverId": "hamilton"}, "status": "Finished"}]
+    payload = {"MRData": {"RaceTable": {"Races": [{"Results": rows}]}}}
+    with patch("app.api.jolpica.requests.get", return_value=_mock_response(payload)):
+        with pytest.raises(JolpicaTransientError):
+            _client().get_race_results(2026, 19)

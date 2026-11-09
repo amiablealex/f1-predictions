@@ -420,6 +420,23 @@ def repair_seats(season, reference_round, refetch, apply_):
                 s.status, s.results_fetched_at = status, fetched
             db.session.flush()
 
+        # Stored rows a re-fetch couldn't replace still lack a team: take it
+        # from the round's other sessions, same car and same driver.
+        sessions = played(rd)
+        known = {
+            (r.car_number, r.actual_driver_id): r.constructor_name
+            for s in sessions for r in s.results if r.constructor_name
+        }
+        for s in sessions:
+            filled = 0
+            for r in s.results:
+                if not r.constructor_name and (r.car_number, r.actual_driver_id) in known:
+                    r.constructor_name = known[(r.car_number, r.actual_driver_id)]
+                    filled += 1
+            if filled:
+                lines.append(f"{s.session_type.value}: team filled on {filled} stored row(s) from other sessions")
+        db.session.flush()
+
         # 3. Specials, then every scored phase, from fresh state.
         db.session.expire_all()
         rd = db.session.get(Round, rid)

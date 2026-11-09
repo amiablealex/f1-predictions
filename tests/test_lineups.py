@@ -308,3 +308,61 @@ def test_repair_seats_refetch_fills_legacy_rows(app, db, make_user, monkeypatch)
     score = _db.session.query(PredictionScore).filter_by(
         round_id=r19.id, user_id=user.id, kind=PredictionType.RACE_TOP10, position=6).one()
     assert score.points == _db.session.get(Round, r19.id).scoring_config.race_top10_correct
+
+
+def test_repair_seats_fills_team_when_refetch_is_refused(app, db, make_user, monkeypatch):
+    """Jolpica serving bad quali data (transient) must not stop the repair:
+    stored quali rows are kept and get their team from the race rows, so
+    the stand-in's quali row resolves to OCO's seat."""
+    from app.api.exceptions import JolpicaTransientError
+    from app.models.prediction import Top3QualiPrediction
+    from app.models.result import SessionResult
+    import app.cli as cli
+
+    user = make_user()
+    r19, d = _make_round(db, 19, open_=False,
+                         race_start=datetime.now(timezone.utc) - timedelta(days=10))
+    _make_round(db, 21)
+    hir = upsert_driver(db.session, _api_driver("hirakawa", 50))
+    db.session.flush()
+    sess = {s.session_type: s for s in r19.sessions}
+    order = ["ver", "had", "law", "lin", "bea"]
+    # HIR qualified P3, finished P6.
+    positions = {SessionType.QUALIFYING: [1, 2, 4, 5, 6, 3], SessionType.RACE: [1, 2, 3, 4, 5, 6]}
+    for st, pos_list in positions.items():
+        for pos, ref in zip(pos_list, order):
+            db.session.add(SessionResult(session_id=sess[st].id, position=pos, car_number=d[ref].permanent_number,
+                                         actual_driver_id=d[ref].id, status="Finished",
+                                         is_classified=True, is_fastest_lap=(pos == 1)))
+        db.session.add(SessionResult(session_id=sess[st].id, position=pos_list[-1], car_number=50,
+                                     actual_driver_id=hir.id, status="Finished",
+                                     is_classified=True, is_fastest_lap=False))
+        sess[st].status = SessionStatus.COMPLETED
+    db.session.add(Top3QualiPrediction(user_id=user.id, round_id=r19.id, position=3,
+                                       predicted_driver_id=d["oco"].id))
+    db.session.commit()
+
+    teams = {r: t for r, _, t in REGULARS}
+    nums = {r: n for r, n, _ in REGULARS}
+    race = [APIRaceEntry(i, nums[r], r, teams[r], "Finished", True, i == 1, grid=i,
+                         laps_completed=50, driver=_api_driver(r, nums[r]))
+            for i, r in enumerate(order, 1)]
+    race.append(APIRaceEntry(6, 50, "hirakawa", HAAS, "Finished", True, False, grid=6,
+                             laps_completed=50, driver=_api_driver("hirakawa", 50)))
+
+    class Refusing(_Fake):
+        def get_qualifying_results(self, season, rnd):
+            raise JolpicaTransientError("position(s) 8 repeated")
+
+    monkeypatch.setattr(cli, "build_default_client", lambda config: Refusing(race=race))
+    out = app.test_cli_runner().invoke(args=["repair-seats", "--season", "2026", "--apply"])
+    assert "qualifying: re-fetch failed" in out.output, out.output
+    assert "qualifying: team filled on 6 stored row(s)" in out.output
+    assert "qualifying: HIR drove OCO's seat" in out.output
+    _db.session.expire_all()
+    q = _db.session.get(type(sess[SessionType.QUALIFYING]), sess[SessionType.QUALIFYING].id)
+    assert all(r.constructor_name for r in q.results)
+    score = _db.session.query(PredictionScore).filter_by(
+        round_id=r19.id, user_id=user.id, kind=PredictionType.QUALI_TOP3, position=3).one()
+    exact = _db.session.get(Round, r19.id).scoring_config.quali_position_buckets[0]["points"]
+    assert score.points == exact     # OCO picked P3; HIR, in OCO's seat, qualified P3

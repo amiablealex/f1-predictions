@@ -361,6 +361,21 @@ class JolpicaClient:
         except KeyError as exc:
             raise JolpicaParseError(f"Driver missing field: {exc}") from exc
 
+    @staticmethod
+    def _require_unique_positions(entries: list, path: str) -> None:
+        """Jolpica occasionally serves a classification mid-edit, with a
+        position repeated (2026 R19 quali: two P8s, everyone below shifted
+        up). Ingesting it would hit uq_session_result_position, so treat it
+        as transient: the worker retries and stored rows stay as they are."""
+        counts: dict[int, int] = {}
+        for e in entries:
+            counts[e.position] = counts.get(e.position, 0) + 1
+        dupes = sorted(p for p, n in counts.items() if n > 1)
+        if dupes:
+            raise JolpicaTransientError(
+                f"{path}: position(s) {', '.join(map(str, dupes))} repeated; data looks mid-edit"
+            )
+
     @classmethod
     def _maybe_driver(cls, d: dict[str, Any]) -> APIDriver | None:
         """Lenient `_parse_driver` for result rows: a missing name field
@@ -485,6 +500,7 @@ class JolpicaClient:
                 constructor_name=(r.get("Constructor") or {}).get("name"),
                 driver=self._maybe_driver(r["Driver"]),
             ))
+        self._require_unique_positions(entries, path)
         entries.sort(key=lambda e: e.position)
         return entries
 
@@ -590,6 +606,7 @@ class JolpicaClient:
                 race_time_ms=race_time_ms,
                 driver=self._maybe_driver(r["Driver"]),
             ))
+        self._require_unique_positions(entries, path)
         entries.sort(key=lambda e: e.position)
         return entries
 

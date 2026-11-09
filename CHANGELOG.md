@@ -15,6 +15,7 @@
 - Substitutions. Picks are seats, and a seat is now matched to whoever drove it by team (`app/seats.py`) instead of by car number, which follows the driver in F1. A pick of an ill or replaced driver scores their stand-in; a promotion between teams (RB driver to Red Bull, reserve into RB) resolves within each team.
 - The worker no longer rewrites a round's lineup from its first results. It added stand-ins as extra seats after the deadline and overwrote a promoted driver's team.
 - A debutant's results are no longer skipped: drivers missing from the master list are created from the result rows.
+- A Jolpica result set with a repeated position (served mid-edit, as 2026 R19 quali was) is treated as transient instead of crashing the results poll on the position constraint. Stored rows are kept.
 - Longest-stint special read a stand-in's pit stops under the regular's id; biggest-team-gap ignored stand-ins.
 
 ### Changed
