@@ -18,6 +18,18 @@
   </form>
 </section>
 
+<section class="card" id="global-leaderboard">
+  <h3>Global leaderboard</h3>
+  <p class="card__hint">The global league ranks every player who opts in. Your private leagues are unaffected.</p>
+  <form method="post" action="{{ url_for('auth.change_global_visibility') }}" class="form">
+    {{ global_form.hidden_tag() }}
+    <label class="field__check">
+      {{ global_form.show_on_global() }} {{ global_form.show_on_global.label.text }}
+    </label>
+    {{ global_form.submit(class_="btn btn--secondary") }}
+  </form>
+</section>
+
 <section class="card">
   <h3>Email</h3>
   <p class="card__hint">Used for sign-in and password reset only.</p>

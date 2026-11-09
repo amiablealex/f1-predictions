@@ -89,6 +89,7 @@ class RegisterForm(FlaskForm):
             EqualTo("password", message="Passwords don't match."),
         ],
     )
+    show_on_global = BooleanField("Show me on the global leaderboard", default=True)
     submit = SubmitField("Create account")
 
     def validate_email(self, field):
@@ -167,6 +168,11 @@ class ChangeEmailForm(FlaskForm):
     def validate_email(self, field):
         if _email_taken(field.data.strip().lower(), exclude_user_id=self._current_user_id):
             raise ValidationError("An account with that email already exists.")
+
+
+class GlobalVisibilityForm(FlaskForm):
+    show_on_global = BooleanField("Show me on the global leaderboard")
+    submit = SubmitField("Save")
 
 
 class ChangePasswordForm(FlaskForm):

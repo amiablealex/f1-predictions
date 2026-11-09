@@ -33,6 +33,11 @@
       {% for err in form.confirm_password.errors %}<span class="field__error">{{ err }}</span>{% endfor %}
     </div>
 
+    <label class="field__check">
+      {{ form.show_on_global() }} {{ form.show_on_global.label.text }}
+    </label>
+    <small class="muted">You can change this later in Account settings.</small>
+
     {{ form.submit(class_="btn btn--primary btn--block") }}
   </form>
 

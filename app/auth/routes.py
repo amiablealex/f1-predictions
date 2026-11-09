@@ -14,6 +14,7 @@ from app.auth.forms import (
     ChangeUsernameForm,
     DeleteAccountForm,
     ForgotPasswordForm,
+    GlobalVisibilityForm,
     LoginForm,
     RegisterForm,
     ResetPasswordForm,
@@ -58,6 +59,7 @@ def register():
         user = User(
             email=form.email.data.strip().lower(),
             username=form.username.data.strip(),
+            show_on_global=form.show_on_global.data,
         )
         user.set_password(form.password.data)
         db.session.add(user)
@@ -204,12 +206,14 @@ def account():
     email_form = ChangeEmailForm(
         current_user_id=current_user.id, email=current_user.email
     )
+    global_form = GlobalVisibilityForm(show_on_global=current_user.show_on_global)
     password_form = ChangePasswordForm()
     delete_form = DeleteAccountForm()
     return render_template(
         "auth/account.html",
         username_form=username_form,
         email_form=email_form,
+        global_form=global_form,
         password_form=password_form,
         delete_form=delete_form,
         title="Account",
@@ -246,6 +250,21 @@ def change_email():
         for errors in form.errors.values():
             for err in errors:
                 flash(err, "error")
+    return redirect(url_for("auth.account"))
+
+
+@auth_bp.route("/account/global", methods=["POST"])
+@login_required
+def change_global_visibility():
+    form = GlobalVisibilityForm()
+    if form.validate_on_submit():
+        current_user.show_on_global = form.show_on_global.data
+        db.session.commit()
+        flash(
+            "You're on the global leaderboard." if current_user.show_on_global
+            else "You're hidden from the global leaderboard.",
+            "success",
+        )
     return redirect(url_for("auth.account"))
 
 
