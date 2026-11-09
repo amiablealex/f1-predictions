@@ -1,16 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ league.name }}</h1>
+<a class="compare-back" href="{{ url_for('leagues.index') }}">‹ Leagues</a>
+<h1>{{ board_name }}</h1>
 
-{% if leagues|length > 1 %}
-  <div class="card" style="padding:8px 12px;">
-    <select onchange="window.location='{{ url_for('leaderboard.view', league_id=0) }}'.replace('/0', '/' + this.value);"
-            class="field__select">
-      {% for l in leagues %}
-        <option value="{{ l.id }}"{% if l.id == league.id %} selected{% endif %}>{{ l.name }}</option>
-      {% endfor %}
-    </select>
+{% if league %}
+  <div class="row" style="gap:8px;margin-bottom:1rem;">
+    <button type="button" class="btn btn--small btn--secondary" data-share-league
+            data-share-url="{{ url_for('invite.landing', code=league.invite_code, _external=True) }}"
+            data-share-text="Join my F1 predictions league: ">
+      Share invite
+    </button>
+    <a href="{{ url_for('leagues.settings', league_id=league.id) }}" class="btn btn--small btn--secondary">Settings</a>
   </div>
+{% else %}
+  <p class="small muted">
+    {% if current_user.show_on_global %}
+      Don't want to appear here? <a href="{{ url_for('auth.account', _anchor='global-leaderboard') }}">Change it in settings</a>.
+    {% else %}
+      You've opted out of the global leaderboard. <a href="{{ url_for('auth.account', _anchor='global-leaderboard') }}">Change it in settings</a>.
+    {% endif %}
+  </p>
 {% endif %}
 
 {% set active_tab = view_kind %}
@@ -45,9 +54,11 @@
                     <span class="muted small tabular" style="min-width:1.5em;">{{ u.rank }}</span>
                     {% if u.is_self %}
                       <span>{{ u.username }} <span class="small muted">(you)</span></span>
-                    {% else %}
+                    {% elif u.user_id in linkable_ids %}
                       <a href="{{ url_for('rounds.list_friend', username=u.username) }}"
                          class="leaderboard-row__link">{{ u.username }}</a>
+                    {% else %}
+                      <span>{{ u.username }}</span>
                     {% endif %}
                   </span>
                 </th>
@@ -98,11 +109,13 @@
           <span class="muted small tabular" style="min-width:1.5em;">{{ row.rank }}</span>
           {% if row.is_self %}
             <span>{{ row.username }} <span class="small muted">(you)</span></span>
-          {% else %}
+          {% elif row.user_id in linkable_ids %}
             <a href="{{ url_for('rounds.list_friend', username=row.username) }}"
                class="leaderboard-row__link">
               {{ row.username }}
             </a>
+          {% else %}
+            <span>{{ row.username }}</span>
           {% endif %}
         </div>
 
@@ -113,12 +126,14 @@
                                   season=last_scored.season,
                                   round_number=last_scored.round_number) }}"
                  class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
-            {% else %}
+            {% elif row.user_id in linkable_ids %}
               <a href="{{ url_for('rounds.view_friend',
                                   season=last_scored.season,
                                   round_number=last_scored.round_number,
                                   username=row.username) }}"
                  class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
+            {% else %}
+              <span class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</span>
             {% endif %}
           {% endif %}
           <span class="tabular pill pill--p10">{{ row.score }}</span>
@@ -132,14 +147,20 @@
 </section>
 
 <p class="small muted">
-  Tap a name to see their season, or a last score to jump to that round.
+  {% if league %}
+    Tap a name to see their season, or a last score to jump to that round.
+  {% else %}
+    Predictions are only visible for players who share a private league with you.
+  {% endif %}
 </p>
 {% endif %}
 
+{% if league %}
 <a href="{{ url_for('leaderboard.compare', league_id=league.id) }}"
    class="btn btn--secondary btn--block" style="margin-top: var(--space-2);">
   Compare a round ›
 </a>
+{% endif %}
 
 <div class="maker-mark" style="margin-top: var(--space-6);">
   <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
@@ -148,4 +169,8 @@
   </span>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/share.js') }}" defer></script>
 {% endblock %}

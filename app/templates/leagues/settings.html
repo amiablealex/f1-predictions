@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ league.name }}</h1>
+<a class="compare-back" href="{{ url_for('leaderboard.view', league_id=league.id) }}">‹ {{ league.name }}</a>
+<h1>Settings</h1>
 <p class="small muted">
   Invite code: <strong class="tabular">{{ league.invite_code }}</strong>
   {% if is_admin %}· You're the admin.{% endif %}
 </p>
 
 <div class="row" style="gap:8px;margin-bottom:1rem;">
-  <a href="{{ url_for('leaderboard.view', league_id=league.id) }}" class="btn btn--primary">Leaderboard</a>
   <button type="button" class="btn btn--secondary" data-share-league
           data-share-url="{{ url_for('invite.landing', code=league.invite_code, _external=True) }}"
           data-share-text="Join my F1 predictions league: ">
@@ -65,46 +65,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-  document.querySelectorAll('[data-share-league]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const url = btn.dataset.shareUrl;
-      const text = btn.dataset.shareText;
-      const fullText = text + url;
-
-      if (navigator.share) {
-        try {
-          await navigator.share({ url, text });
-          return;
-        } catch (e) {
-          return; // user cancelled — leave the page alone
-        }
-      }
-
-      // Clipboard fallback
-      const flash = () => {
-        const original = btn.textContent;
-        btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = original; }, 2000);
-      };
-
-      try {
-        await navigator.clipboard.writeText(fullText);
-        flash();
-      } catch (e) {
-        const ta = document.createElement('textarea');
-        ta.value = fullText;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        try { document.execCommand('copy'); } catch (_) {}
-        document.body.removeChild(ta);
-        flash();
-      }
-    });
-  });
-})();
-</script>
+<script src="{{ url_for('static', filename='js/share.js') }}" defer></script>
 {% endblock %}

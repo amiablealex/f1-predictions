@@ -7,30 +7,36 @@
   <a href="{{ url_for('leagues.join') }}" class="btn btn--secondary">Join with code</a>
 </div>
 
-{% if not leagues %}
-  <section class="card" style="text-align:center; padding: var(--space-8) var(--space-4);">
-    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="empty-hero-image">
-    <h3 class="muted">You're not in any leagues.</h3>
-    <p class="muted small">Start your own competition or join one with a code.</p>
-  </section>
-{% else %}
-  {% for league in leagues %}
-    <section class="card">
-      <div class="row row--space">
-        <div>
-          <h3 style="margin:0;">{{ league.name }}</h3>
-          <div class="small muted">Code: <span class="tabular">{{ league.invite_code }}</span></div>
-        </div>
-        <a href="{{ url_for('leagues.detail', league_id=league.id) }}" class="btn btn--small btn--secondary">Open</a>
-      </div>
-    </section>
+<section class="card">
+  {% for s in standings %}
+    <a class="leaderboard-row leagues-row"
+       href="{{ url_for('leaderboard.view', league_id=s.league_id) if s.league_id else url_for('leaderboard.global_view') }}">
+      <span class="leaderboard-row__name">{{ s.name }}</span>
+      <span class="leaderboard-row__cols">
+        <span class="small {{ 'muted' if s.rank is none }} tabular">{{ s.position }}</span>
+        {% if s.movement == 'up' %}
+          <span class="movement movement--up" title="Up a place after the last round" aria-label="Up">▲</span>
+        {% elif s.movement == 'down' %}
+          <span class="movement movement--down" title="Down a place after the last round" aria-label="Down">▼</span>
+        {% elif s.movement == 'same' %}
+          <span class="movement movement--same" title="No change after the last round" aria-label="No change">=</span>
+        {% else %}
+          <span class="movement" aria-hidden="true"></span>
+        {% endif %}
+        <span class="muted" aria-hidden="true">›</span>
+      </span>
+    </a>
   {% endfor %}
+</section>
 
-  <div class="maker-mark" style="margin-top: var(--space-6);">
-    <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
-    <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
-      F1 Predictions
-    </span>
-  </div>
+{% if standings|length == 1 %}
+  <p class="small muted">You're not in any private leagues yet. Create one or join with a code.</p>
 {% endif %}
+
+<div class="maker-mark" style="margin-top: var(--space-6);">
+  <img src="{{ url_for('static', filename='img/f1-car-sketch.png') }}" class="maker-mark-image">
+  <span class="xs muted tabular uppercase" style="letter-spacing: 0.1em;">
+    F1 Predictions
+  </span>
+</div>
 {% endblock %}

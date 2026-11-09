@@ -1,6 +1,6 @@
 """Leaderboard blueprint.
 
-Two views per league:
+Views per league (the virtual Global league reuses all but Compare):
   - 'total' (default): cumulative points across the season + most recent
     round's score in a "Last" column.
   - 'h2h': count of rounds where each user was the top scorer in this
@@ -27,7 +27,6 @@ from app.utils import (
     get_neighbour_rounds,
     get_round_by_number,
     load_round_comparison,
-    most_recent_visible_round,
     user_leagues,
 )
 
@@ -48,23 +47,51 @@ class LeaderboardRow:
 @leaderboard_bp.route("/")
 @login_required
 def index():
-    """Default to the user's first league, or show 'no leagues' state."""
-    leagues = user_leagues(current_user.id)
-    if not leagues:
-        return render_template("leaderboard/no_leagues.html", title="Leaderboard")
+    """The Leagues landing page replaced this; kept for old links."""
     from flask import redirect, url_for
-    return redirect(url_for("leaderboard.view", league_id=leagues[0].id))
+    return redirect(url_for("leagues.index"))
+
+
+@leaderboard_bp.route("/global")
+@login_required
+def global_view():
+    """Every opted-in player. Names only link through where the viewer
+    shares a private league, so predictions stay league-scoped."""
+    from app.utils import league_mate_ids
+    return _render_board(
+        name="Global",
+        member_ids=global_member_ids(current_user),
+        linkable_ids=league_mate_ids(current_user.id),
+        endpoint_args={},
+        league=None,
+    )
 
 
 @leaderboard_bp.route("/<int:league_id>")
 @login_required
 def view(league_id: int):
     league = assert_member(current_user.id, league_id)
+    member_ids = _league_member_ids(league_id)
+    return _render_board(
+        name=league.name,
+        member_ids=member_ids,
+        linkable_ids=set(member_ids),
+        endpoint_args={"league_id": league_id},
+        league=league,
+    )
+
+
+def _render_board(
+    name: str,
+    member_ids: list[int],
+    linkable_ids: set[int],
+    endpoint_args: dict,
+    league: League | None,
+):
     view_kind = request.args.get("view", "total")
     if view_kind not in ("total", "h2h", "heatmap"):
         view_kind = "total"
 
-    member_ids = _league_member_ids(league_id)
     members_by_id = {u.id: u for u in db.session.query(User).filter(User.id.in_(member_ids)).all()}
 
     last_scored = _most_recent_scored_round()
@@ -74,21 +101,23 @@ def view(league_id: int):
     if view_kind == "heatmap":
         heatmap = _build_heatmap(members_by_id)
     elif view_kind == "h2h":
-        rows = _build_h2h_rows(league_id, members_by_id, last_scored)
+        rows = _build_h2h_rows(members_by_id, last_scored)
     else:
-        rows = _build_total_rows(league_id, members_by_id, last_scored)
+        rows = _build_total_rows(members_by_id, last_scored)
 
     return render_template(
         "leaderboard/view.html",
         league=league,
-        leagues=user_leagues(current_user.id),
+        board_name=name,
+        board_endpoint="leaderboard.view" if league else "leaderboard.global_view",
+        board_args=endpoint_args,
+        linkable_ids=linkable_ids,
         view_kind=view_kind,
         rows=rows,
         heatmap=heatmap,
-        friend_landing=most_recent_visible_round(current_app.config["F1_SEASON"]),
         last_scored=last_scored,
         provisional_note=_provisional_note(),
-        title=f"{league.name} · Leaderboard",
+        title=f"{name} · Leaderboard",
     )
 
 
@@ -191,7 +220,6 @@ def _most_recent_scored_round() -> Round | None:
 
 
 def _build_total_rows(
-    league_id: int,
     members_by_id: dict[int, User],
     last_scored: Round | None,
 ) -> list[LeaderboardRow]:
@@ -248,7 +276,6 @@ def _build_total_rows(
 
 
 def _build_h2h_rows(
-    league_id: int,
     members_by_id: dict[int, User],
     last_scored: Round | None,
 ) -> list[LeaderboardRow]:
@@ -369,6 +396,7 @@ def _build_heatmap(members_by_id: dict[int, User]) -> dict:
             c = cell.get((u.id, rid))
             cells.append(None if c is None or c[1] == 0 else c[0])
         users.append({
+            "user_id": u.id,
             "rank": rank,
             "username": u.username,
             "is_self": u.id == current_user.id,
@@ -376,6 +404,92 @@ def _build_heatmap(members_by_id: dict[int, User]) -> dict:
         })
 
     return {"rounds": completed, "users": users}
+
+
+def global_member_ids(viewer: User) -> list[int]:
+    """Opted-in users with at least one scored round this season, plus the
+    viewer if opted in, so a newcomer still sees where they stand."""
+    ids = {
+        uid for (uid,) in db.session.query(PredictionScore.user_id)
+        .join(Round, Round.id == PredictionScore.round_id)
+        .join(User, User.id == PredictionScore.user_id)
+        .filter(
+            Round.season == current_app.config["F1_SEASON"],
+            User.show_on_global.is_(True),
+        )
+        .distinct()
+        .all()
+    }
+    if viewer.show_on_global:
+        ids.add(viewer.id)
+    return sorted(ids)
+
+
+@dataclass
+class Standing:
+    name: str
+    league_id: int | None       # None for Global
+    rank: int | None            # None when the viewer is hidden from Global
+    size: int
+    movement: str | None        # 'up' | 'down' | 'same' | None (no earlier round)
+
+    @property
+    def position(self) -> str:
+        if self.rank is None:
+            return "Hidden"
+        suffix = "th" if 10 <= self.rank % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(self.rank % 10, "th")
+        return f"{self.rank}{suffix} of {self.size}"
+
+
+def user_standings(viewer: User) -> list[Standing]:
+    """The viewer's total-points position in Global and each private league,
+    with movement caused by the most recent scored round.
+
+    Previous position = the same ranking with that round's points removed,
+    over the same members, so nothing is stored and joiners can't move you.
+    """
+    totals: dict[int, int] = {
+        uid: int(pts) for uid, pts in db.session.query(
+            PredictionScore.user_id, func.coalesce(func.sum(PredictionScore.points), 0),
+        ).group_by(PredictionScore.user_id).all()
+    }
+    last_scored = _most_recent_scored_round()
+    previous: dict[int, int] | None = None
+    if last_scored is not None:
+        has_earlier = db.session.query(PredictionScore.id).filter(
+            PredictionScore.round_id != last_scored.id,
+        ).first() is not None
+        if has_earlier:
+            last_pts = dict(
+                db.session.query(
+                    PredictionScore.user_id, func.coalesce(func.sum(PredictionScore.points), 0),
+                )
+                .filter(PredictionScore.round_id == last_scored.id)
+                .group_by(PredictionScore.user_id)
+                .all()
+            )
+            previous = {uid: t - int(last_pts.get(uid, 0)) for uid, t in totals.items()}
+
+    def standing(name: str, league_id: int | None, member_ids: list[int]) -> Standing:
+        if viewer.id not in member_ids:
+            return Standing(name, league_id, None, len(member_ids), None)
+        rank = _dense_rank(totals, member_ids, viewer.id)
+        movement = None
+        if previous is not None:
+            before = _dense_rank(previous, member_ids, viewer.id)
+            movement = "up" if rank < before else "down" if rank > before else "same"
+        return Standing(name, league_id, rank, len(member_ids), movement)
+
+    out = [standing("Global", None, global_member_ids(viewer))]
+    for league in user_leagues(viewer.id):
+        out.append(standing(league.name, league.id, _league_member_ids(league.id)))
+    return out
+
+
+def _dense_rank(totals: dict[int, int], member_ids: list[int], user_id: int) -> int:
+    """Dense rank of `user_id` among `member_ids`, matching `_rank`."""
+    mine = totals.get(user_id, 0)
+    return 1 + len({totals.get(uid, 0) for uid in member_ids if totals.get(uid, 0) > mine})
 
 
 def _rank(

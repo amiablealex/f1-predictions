@@ -180,6 +180,17 @@ def user_is_admin_of(user_id: int, league_id: int) -> bool:
     return league is not None and league.created_by_id == user_id
 
 
+def league_mate_ids(user_id: int) -> set[int]:
+    """Everyone sharing at least one private league with `user_id`."""
+    mine = db.session.query(LeagueMembership.league_id).filter_by(user_id=user_id)
+    return {
+        uid for (uid,) in db.session.query(LeagueMembership.user_id)
+        .filter(LeagueMembership.league_id.in_(mine))
+        .distinct()
+        .all()
+    }
+
+
 def assert_member(user_id: int, league_id: int) -> League:
     league = db.session.get(League, league_id)
     if league is None or not user_is_member(user_id, league_id):

@@ -536,6 +536,14 @@ p { margin: 0 0 var(--space-3) 0; }
   color: inherit;
 }
 
+/* Leagues landing: whole row taps through to the league's leaderboard. */
+.leagues-row { color: var(--c-ink); text-decoration: none; }
+.leagues-row:last-child { border-bottom: none; }
+.movement { width: 1em; text-align: center; font-size: var(--fs-sm); }
+.movement--up { color: var(--c-points-10); }
+.movement--down { color: var(--c-points-neg); }
+.movement--same { color: var(--c-ink-muted); }
+
 /* ----------------------------------------------------------- Status banner */
 
 .status-banner {
