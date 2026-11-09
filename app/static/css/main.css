@@ -1477,7 +1477,6 @@ p { margin: 0 0 var(--space-3) 0; }
 .lb-col--total { width: 6.4rem; white-space: nowrap; }
 .lb-col--total.lb-col--narrow { width: 3rem; }   /* head-to-head: no pprp beside the total */
 .leaderboard-row__total { font-weight: 600; }
-.leaderboard-note { text-align: right; margin: 0 0 var(--space-2); }
 /* Self row: bleed the highlight outwards so its figures stay on the column lines. */
 .leaderboard-row--self { margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px; }
 .leaderboard-row__last { color: var(--c-ink-muted); text-decoration: none; }

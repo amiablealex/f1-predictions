@@ -103,9 +103,6 @@
     {% endif %}
   </section>
 {% else %}
-{% if view_kind == 'total' and rows %}
-  <p class="xs muted leaderboard-note">pprp = points per round participated</p>
-{% endif %}
 <section class="card">
   {% if not rows %}
     <p class="muted">No scores yet. The leaderboard fills in as phases reveal.</p>
@@ -166,6 +163,7 @@
 </section>
 
 <p class="small muted">
+  {% if view_kind == 'total' and rows %}pprp = points per round participated.{% endif %}
   {% if league %}
     Tap a name to see their season, or a last score to jump to that round.
   {% else %}

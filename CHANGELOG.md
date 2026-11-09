@@ -21,7 +21,7 @@
 - Results opens with a season chart: one muted bar per scored round across the full calendar, dots for rounds to come, with total points and points per round participated.
 
 ### Changed
-- Design language: coloured pills now mean points only. A hit (top bucket) is solid moss, partial credit keeps its tint, a miss is plain muted text, and the compare grid shows the hit pill instead of a tick. Results list totals are plain numerals; the round page keeps its shaded total. The leaderboard has two columns, Last and Total (pprp), with a note explaining pprp. Statuses are a small dot and quiet text, shown only when not completed; session times are plain text. Empty prediction fields are marked in ochre rather than red.
+- Design language: coloured pills now mean points only. A hit (top bucket) is solid moss, partial credit keeps its tint, a miss is plain muted text, and the compare grid shows the hit pill instead of a tick. Results list totals are plain numerals; the round page keeps its shaded total. The leaderboard has two columns, Last and Total (pprp), with pprp explained in the footnote; a sub-header under the league name shows player count and, while a round is open, how many predictions are in. Statuses are a small dot and quiet text, shown only when not completed; session times are plain text. Empty prediction fields are marked in ochre rather than red.
 - Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
 ### Fixed
