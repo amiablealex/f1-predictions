@@ -339,6 +339,6 @@ def test_results_page_chart_and_quiet_states(client, login, db, trio):
     html = client.get("/results").get_data(as_text=True)
     assert 'class="season-chart"' in html
     assert "per round participated" in html
-    assert "score-chip" in html
+    assert "42<span class=\"unit\">pts</span>" in html
     # A completed round's status isn't repeated on every row.
     assert "pill--status-completed" not in html

@@ -103,6 +103,9 @@
     {% endif %}
   </section>
 {% else %}
+{% if view_kind == 'total' and rows %}
+  <p class="xs muted leaderboard-note">pprp = points per round participated</p>
+{% endif %}
 <section class="card">
   {% if not rows %}
     <p class="muted">No scores yet. The leaderboard fills in as phases reveal.</p>
@@ -114,15 +117,7 @@
         {% if last_scored %}
           <span class="lb-col lb-col--last">Last (R{{ last_scored.round_number }})</span>
         {% endif %}
-        <span class="lb-col lb-col--total">Total</span>
-        {% if view_kind == 'total' %}
-          <span class="lb-col lb-col--pprp leaderboard-row__pprp-head">
-            <button type="button" class="tooltip-trigger"
-                    aria-label="What is this?" aria-expanded="false"
-                    data-tooltip="Points per round participated — your average score across only the rounds you made at least one prediction in. Rounds you sat out don't count.">i</button>
-            pprp
-          </span>
-        {% endif %}
+        <span class="lb-col lb-col--total">{% if view_kind == 'total' %}Total (pprp){% else %}Total{% endif %}</span>
       </div>
     </div>
 
@@ -160,10 +155,10 @@
               <span class="tabular lb-col lb-col--last leaderboard-row__last leaderboard-row__last-link">{{ row.last_score }}</span>
             {% endif %}
           {% endif %}
-          <span class="tabular lb-col lb-col--total leaderboard-row__total">{{ row.score }}</span>
-          {% if view_kind == 'total' %}
-            <span class="tabular lb-col lb-col--pprp leaderboard-row__pprp">{{ row.pprp if row.pprp is not none else '—' }}</span>
-          {% endif %}
+          <span class="tabular lb-col lb-col--total">
+            <strong class="leaderboard-row__total">{{ row.score }}</strong>
+            {%- if view_kind == 'total' and row.pprp is not none %} <span class="leaderboard-row__pprp">({{ row.pprp }})</span>{% endif %}
+          </span>
         </div>
       </div>
     {% endfor %}

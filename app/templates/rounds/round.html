@@ -37,8 +37,6 @@
 
 {% if not is_self %}
   {{ friend_view_strip(viewed_user, url_for('rounds.view', season=rd.season, round_number=rd.round_number)) }}
-{% else %}
-  <a class="back-link" href="{{ url_for('rounds.list') }}">‹ Results</a>
 {% endif %}
 
 {{ round_header(rd, prev_round=prev_round, next_round=next_round, friend_username=friend_username) }}

@@ -1287,17 +1287,8 @@ p { margin: 0 0 var(--space-3) 0; }
 }
 .compare__subhead { padding-top: 50px; }
 
-/* pprp column — no pill, laid straight on the surface, quieter than Total. */
-.leaderboard-row__pprp {
-  min-width: 2.6em;
-  text-align: right;
-  color: var(--c-ink-muted);
-  font-size: var(--fs-sm);
-}
-.leaderboard-row__pprp-head {
-  display: inline-flex;
-  align-items: center;
-}
+/* pprp figure beside the total: quieter than the total itself. */
+.leaderboard-row__pprp { color: var(--c-ink-muted); }
 
 /* --------------------------------------------- Admin metrics */
 /* Read-only usage figures. Deliberately reuses .card, .pill and .tabular;
@@ -1472,30 +1463,24 @@ p { margin: 0 0 var(--space-3) 0; }
 .pill.pill--status-dirty::before { background: var(--c-accent); }
 
 /* Aggregates: numerals, no capsules */
-.total-score-pill,
-.total-score-pill--primary { background: transparent; padding-left: 0; padding-right: 0; }
-.total-score-pill--big { font-size: 3rem; }
-.total-score-pill--phase { font-size: var(--fs-md); }
+.total-score-pill--phase { padding-left: 0; padding-right: 0; font-size: var(--fs-md); }
 .unit { font-family: var(--font-body); font-size: var(--fs-xs); color: var(--c-ink-muted); margin-left: 3px; font-weight: 400; }
 /* Leaderboard number columns: fixed rem widths, right-aligned, shared by the
    header and every row so each figure sits under its heading. */
 .leaderboard-row__cols { gap: var(--space-2); }
-.lb-col { display: inline-block; text-align: right; flex: 0 0 auto; }
-.lb-col--last  { width: 4.6rem; }
-.lb-col--total { width: 3rem; }
-.lb-col--pprp  { width: 3.4rem; min-width: 0; }
-.leaderboard-row__pprp-head { display: inline-flex; justify-content: flex-end; align-items: center; gap: 4px; }
+.lb-col { display: inline-block; text-align: right; flex: 0 0 auto; font-size: var(--fs-sm); }
+.lb-col--last  { width: 4.4rem; }
+.lb-col--total { width: 6.4rem; white-space: nowrap; }
 .leaderboard-row__total { font-weight: 600; }
+.leaderboard-note { text-align: right; margin: 0 0 var(--space-2); }
 /* Self row: bleed the highlight outwards so its figures stay on the column lines. */
 .leaderboard-row--self { margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px; }
 .leaderboard-row__last { color: var(--c-ink-muted); text-decoration: none; }
-/* Round total on the Results list: the one shaded chip kept for a total. */
-.score-chip { background: rgba(79, 107, 58, 0.13); color: var(--c-points-10); }
+.rounds-list-row__pts { font-family: var(--font-display); font-size: var(--fs-lg); white-space: nowrap; }
 .session-time { font-size: var(--fs-xs); color: var(--c-ink-muted); letter-spacing: 0.02em; }
 
 /* Empty prediction field: needs attention, not an error */
 .field--prediction[data-empty] { border-left-color: rgba(184, 134, 44, 0.6); }
-.round-total__value .tooltip-trigger { margin-left: 6px; }
 
 /* Season chart on Results: sits on the parchment, no card. One column per
    round of the calendar; a single muted moss bar per scored round, a dot

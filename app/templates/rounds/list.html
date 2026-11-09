@@ -69,7 +69,7 @@
         <div class="rounds-list-row__right">
           {% if "completed" not in row.status_class %}<span class="{{ row.status_class }}">{{ row.status_label }}</span>{% endif %}
           {% if row.points is not none %}
-            <span class="pill score-chip tabular">{{ row.points }}</span>
+            <span class="rounds-list-row__pts tabular">{{ row.points }}<span class="unit">pts</span></span>
           {% endif %}
         </div>
       </a>
