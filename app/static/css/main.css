@@ -204,6 +204,11 @@ p { margin: 0 0 var(--space-3) 0; }
   font-weight: 500;
 }
 .drawer__link:hover { background: var(--c-surface-alt); }
+.drawer__link[aria-current="page"] {
+  background: var(--c-surface-alt);
+  box-shadow: inset 3px 0 0 var(--c-ink);
+  font-weight: 600;
+}
 .drawer__link--button { font: inherit; cursor: pointer; }
 .drawer__signout-form { margin: 0; }
 
@@ -261,6 +266,21 @@ p { margin: 0 0 var(--space-3) 0; }
 .flash--error   { border-color: rgba(139, 31, 31, 0.4); background: rgba(139, 31, 31, 0.06); color: var(--c-accent); }
 .flash--success { border-color: rgba(79, 107, 58, 0.4); background: rgba(79, 107, 58, 0.07); color: var(--c-points-10); }
 .flash--info    { border-color: var(--c-border); }
+.flash {
+  overflow: hidden;
+  transition: opacity 0.3s ease, max-height 0.35s ease 0.25s,
+              padding 0.35s ease 0.25s, border-width 0.35s ease 0.25s;
+}
+.flash--fading {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
+  border-bottom-width: 0;
+}
+.flash-stack { transition: margin 0.35s ease 0.25s, gap 0.35s ease 0.25s; }
+.flash-stack--empty { margin-bottom: 0; gap: 0; }
 
 /* ----------------------------------------------------------------- Cards */
 
@@ -543,6 +563,9 @@ p { margin: 0 0 var(--space-3) 0; }
 .movement--up { color: var(--c-points-10); }
 .movement--down { color: var(--c-points-neg); }
 .movement--same { color: var(--c-ink-muted); }
+
+/* League-mates with picks saved for the open round. */
+.submitted-tick { flex: 0 0 auto; margin-left: -6px; color: var(--c-points-10); }
 
 /* ----------------------------------------------------------- Status banner */
 

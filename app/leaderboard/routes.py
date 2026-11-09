@@ -10,7 +10,7 @@ Views per league (the virtual Global league shows Total points only):
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from flask import Blueprint, abort, current_app, render_template, request
@@ -42,6 +42,7 @@ class LeaderboardRow:
     rank: int                   # 1-based dense rank on `score` (ties share)
     is_self: bool
     pprp: float | None = None   # points per round participated (total view only)
+    tied: bool = False          # another row shares this rank — shown as "=3"
 
 
 @leaderboard_bp.route("/")
@@ -105,9 +106,17 @@ def _render_board(
     else:
         rows = _build_total_rows(members_by_id, last_scored)
 
+    # While the current round is open, tick league-mates who've saved picks.
+    # Private leagues only; Global never shows it.
+    open_round = _open_round() if league else None
+    submitted_ids = _submitted_ids(open_round.id, member_ids) if open_round else set()
+
     return render_template(
         "leaderboard/view.html",
         league=league,
+        open_round=open_round,
+        submitted_ids=submitted_ids,
+        member_count=len(member_ids),
         board_name=name,
         board_endpoint="leaderboard.view" if league else "leaderboard.global_view",
         board_args=endpoint_args,
@@ -403,7 +412,33 @@ def _build_heatmap(members_by_id: dict[int, User]) -> dict:
             "cells": cells,
         })
 
+    counts = Counter(u["rank"] for u in users)
+    for u in users:
+        u["tied"] = counts[u["rank"]] > 1
     return {"rounds": completed, "users": users}
+
+
+def _open_round() -> Round | None:
+    """The current round if it is still taking predictions."""
+    from datetime import datetime, timezone
+    from app.utils import get_current_round
+    rd = get_current_round(current_app.config["F1_SEASON"])
+    if rd is None or rd.predictions_locked or rd.predictions_deadline is None:
+        return None
+    return rd if rd.predictions_deadline > datetime.now(timezone.utc) else None
+
+
+def _submitted_ids(round_id: int, member_ids: list[int]) -> set[int]:
+    """Members with at least one saved prediction for the round."""
+    from sqlalchemy import select, union
+    from app.admin.metrics import PREDICTION_TABLES
+    if not member_ids:
+        return set()
+    stmt = union(*[
+        select(m.user_id).where(m.round_id == round_id, m.user_id.in_(member_ids))
+        for m in PREDICTION_TABLES
+    ])
+    return {uid for (uid,) in db.session.execute(stmt).all()}
 
 
 def global_member_ids(viewer: User) -> list[int]:
@@ -432,13 +467,14 @@ class Standing:
     rank: int | None            # None when the viewer is hidden from Global
     size: int
     movement: str | None        # 'up' | 'down' | 'same' | None (no earlier round)
+    tied: bool = False
 
     @property
     def position(self) -> str:
         if self.rank is None:
             return "Hidden"
         suffix = "th" if 10 <= self.rank % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(self.rank % 10, "th")
-        return f"{self.rank}{suffix} of {self.size}"
+        return f"{'=' if self.tied else ''}{self.rank}{suffix} of {self.size}"
 
 
 def user_standings(viewer: User) -> list[Standing]:
@@ -478,7 +514,9 @@ def user_standings(viewer: User) -> list[Standing]:
         if previous is not None:
             before = _dense_rank(previous, member_ids, viewer.id)
             movement = "up" if rank < before else "down" if rank > before else "same"
-        return Standing(name, league_id, rank, len(member_ids), movement)
+        mine = totals.get(viewer.id, 0)
+        tied = sum(1 for uid in member_ids if totals.get(uid, 0) == mine) > 1
+        return Standing(name, league_id, rank, len(member_ids), movement, tied)
 
     out = [standing("Global", None, global_member_ids(viewer))]
     for league in user_leagues(viewer.id):
@@ -515,4 +553,7 @@ def _rank(
             rank=rank,
             is_self=(user_id == current_user.id),
         ))
+    counts = Counter(r.rank for r in out)
+    for r in out:
+        r.tied = counts[r.rank] > 1
     return out

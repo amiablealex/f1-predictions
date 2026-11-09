@@ -34,6 +34,12 @@
   {% include "leaderboard/_tabs.html" %}
 {% endif %}
 
+{% if open_round %}
+  <p class="small muted submitted-note">
+    Predictions in for R{{ open_round.round_number }}: {{ submitted_ids|length }} of {{ member_count }}
+  </p>
+{% endif %}
+
 {% if provisional_note and view_kind != 'heatmap' %}
   <div class="status-banner status-banner--pending">{{ provisional_note }}</div>
 {% endif %}
@@ -60,7 +66,7 @@
               <tr>
                 <th class="heatmap__name{% if u.is_self %} heatmap__name--self{% endif %}" scope="row">
                   <span class="row" style="gap:12px;">
-                    <span class="muted small tabular" style="min-width:1.5em;">{{ u.rank }}</span>
+                    <span class="muted small tabular" style="min-width:2em;">{% if u.tied %}={% endif %}{{ u.rank }}</span>
                     {% if u.is_self %}
                       <span>{{ u.username }} <span class="small muted">(you)</span></span>
                     {% elif u.user_id in linkable_ids %}
@@ -69,6 +75,7 @@
                     {% else %}
                       <span>{{ u.username }}</span>
                     {% endif %}
+                    {% if u.user_id in submitted_ids %}<svg class="submitted-tick" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Predictions in"><title>Predictions in for R{{ open_round.round_number }}</title><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}
                   </span>
                 </th>
                 {% for c in u.cells %}
@@ -86,6 +93,13 @@
           </tbody>
         </table>
       </div>
+      <script>
+        // Open at the latest rounds; earlier ones are a swipe away.
+        (function () {
+          var el = document.querySelector('.heatmap-scroll');
+          if (el) el.scrollLeft = el.scrollWidth;
+        })();
+      </script>
     {% endif %}
   </section>
 {% else %}
@@ -115,7 +129,7 @@
     {% for row in rows %}
       <div class="leaderboard-row{% if row.is_self %} leaderboard-row--self{% endif %}">
         <div class="leaderboard-row__name row" style="gap:12px;">
-          <span class="muted small tabular" style="min-width:1.5em;">{{ row.rank }}</span>
+          <span class="muted small tabular" style="min-width:2em;">{% if row.tied %}={% endif %}{{ row.rank }}</span>
           {% if row.is_self %}
             <span>{{ row.username }} <span class="small muted">(you)</span></span>
           {% elif row.user_id in linkable_ids %}
@@ -126,6 +140,7 @@
           {% else %}
             <span>{{ row.username }}</span>
           {% endif %}
+          {% if row.user_id in submitted_ids %}<svg class="submitted-tick" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Predictions in"><title>Predictions in for R{{ open_round.round_number }}</title><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}
         </div>
 
         <div class="leaderboard-row__cols">

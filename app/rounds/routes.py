@@ -23,7 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.prediction import PredictionScore
-from app.models.round import Round, RoundState
+from app.models.round import Round, RoundState, SessionStatus
 from app.models.user import User
 from app.utils import (
     get_current_round,
@@ -91,6 +91,19 @@ def _build_list_rows(season: int, user_id: int) -> list[RoundListEntry]:
             points=points,
         ))
     return out
+
+
+_RESULTS_INCOMING = {
+    SessionStatus.IN_PROGRESS,
+    SessionStatus.PENDING_RESULTS,
+    SessionStatus.PROVISIONAL,
+}
+
+
+def _results_incoming(state) -> bool:
+    """A session is live or its results are still arriving — the round page
+    reloads itself while this holds."""
+    return any(s.status in _RESULTS_INCOMING for s in state.sessions.values())
 
 
 def _users_share_a_league(a_id: int, b_id: int) -> bool:
@@ -179,6 +192,7 @@ def view(season: int, round_number: int):
         viewed_user=current_user,
         leagues=user_leagues(current_user.id),
         friend_username=None,
+        auto_refresh=_results_incoming(state),
         title=rd.display_label,
     )
 
@@ -210,5 +224,6 @@ def view_friend(season: int, round_number: int, username: str):
         viewed_user=friend,
         leagues=user_leagues(current_user.id),
         friend_username=friend.username,
+        auto_refresh=_results_incoming(state),
         title=f"{friend.username} · {rd.display_label}",
     )

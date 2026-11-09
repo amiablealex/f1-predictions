@@ -227,3 +227,80 @@ def test_league_forms_link_back(client, make_user, login, path):
     login()
     html = client.get(path).get_data(as_text=True)
     assert 'class="back-link" href="/leagues/"' in html
+
+
+# --------------------------------------------------------------- niceties
+
+
+def _open_round(db, n=9):
+    rd = upsert_round_with_sessions(db.session, APIRound(
+        season=2026, round_number=n, gp_name=f"GP {n}", country="Italy",
+        country_code="IT", circuit_name="C", circuit_ref=f"c{n}", has_sprint=False,
+        sessions=[APIScheduledSession("race", datetime.now(timezone.utc) + timedelta(days=5))],
+    ))
+    db.session.commit()
+    assert not rd.predictions_locked and rd.predictions_deadline is not None
+    return rd
+
+
+def test_ties_marked_on_board_and_landing(client, login, db, trio):
+    from app.leaderboard.routes import user_standings
+    alice, bob, stranger = trio
+    _league(db, "Mates", "MATE01", alice, bob, stranger)
+    rd = _round(db, 1)
+    _score(db, alice, rd, 10)
+    _score(db, bob, rd, 10)
+    _score(db, stranger, rd, 4)
+    login()
+    html = client.get(f"/leaderboard/{db.session.query(League).one().id}").get_data(as_text=True)
+    assert html.count(">=1<") == 2
+    assert ">2<" in html and ">=2<" not in html
+    mates = [s for s in user_standings(alice) if s.name == "Mates"][0]
+    assert mates.position == "=1st of 3"
+
+
+def test_submitted_ticks_on_league_board_only(client, login, db, trio):
+    from app.models.prediction import PoleTimePrediction
+    alice, bob, _ = trio
+    league = _league(db, "Mates", "MATE01", alice, bob)
+    rd = _open_round(db)
+    db.session.add(PoleTimePrediction(user_id=bob.id, round_id=rd.id, predicted_time_ms=80000))
+    db.session.commit()
+    login()
+    html = client.get(f"/leaderboard/{league.id}").get_data(as_text=True)
+    assert f"Predictions in for R{rd.round_number}: 1 of 2" in html
+    assert html.count('class="submitted-tick"') == 1
+    heat = client.get(f"/leaderboard/{league.id}?view=heatmap").get_data(as_text=True)
+    assert "Predictions in for R" in heat
+    glob = client.get("/leaderboard/global").get_data(as_text=True)
+    assert "submitted-tick" not in glob and "Predictions in for R" not in glob
+
+
+def test_no_ticks_without_open_round(client, login, db, trio):
+    alice, bob, _ = trio
+    league = _league(db, "Mates", "MATE01", alice, bob)
+    _round(db, 1)
+    login()
+    html = client.get(f"/leaderboard/{league.id}").get_data(as_text=True)
+    assert "Predictions in for R" not in html
+
+
+@pytest.mark.parametrize("status, expect", [("PROVISIONAL", True), ("COMPLETED", False)])
+def test_round_page_auto_refresh(client, make_user, login, db, status, expect):
+    from app.models.round import SessionStatus
+    make_user()
+    rd = _round(db, 1)
+    for s in rd.sessions:
+        s.status = SessionStatus[status]
+    db.session.commit()
+    login()
+    html = client.get(f"/round/2026/{rd.round_number}").get_data(as_text=True)
+    assert ("location.reload" in html) is expect
+
+
+def test_menu_marks_current_section(client, make_user, login):
+    make_user()
+    login()
+    html = client.get("/leagues/").get_data(as_text=True)
+    assert 'class="drawer__link" aria-current="page">Leagues<' in html
+    assert html.count('aria-current="page"') == 1

@@ -372,3 +372,23 @@
   </p>
 {% endif %}
 {% endblock %}
+
+{% block scripts %}
+{% if auto_refresh %}
+<script>
+  // Results are still arriving: reload every 2 minutes while the page is
+  // visible, and straight away on return if it's been longer than that.
+  (function () {
+    var EVERY = 120000;
+    var loaded = Date.now();
+    function maybeReload() {
+      if (document.visibilityState === 'visible' && Date.now() - loaded >= EVERY) {
+        location.reload();
+      }
+    }
+    setInterval(maybeReload, 15000);
+    document.addEventListener('visibilitychange', maybeReload);
+  })();
+</script>
+{% endif %}
+{% endblock %}

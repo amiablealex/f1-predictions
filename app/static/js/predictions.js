@@ -129,6 +129,15 @@
   form.addEventListener('input',  () => { validateAll(); updateBadge(); });
   form.addEventListener('change', () => { validateAll(); updateBadge(); });
 
+  // Warn before navigating away from unsaved picks. Saving clears it.
+  let saving = false;
+  form.addEventListener('submit', () => { saving = true; });
+  window.addEventListener('beforeunload', (e) => {
+    if (saving || !isDirty()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
   validateAll();
   updateBadge();
 })();

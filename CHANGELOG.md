@@ -13,6 +13,11 @@
 - Global league of every player who opts in (default on, set at signup and in Account settings). Total points only; names only link through where you share a private league.
 - Leagues page lists Global and each private league with your position and an arrow for movement in the last scored round. The Leaderboard menu item is merged into it; share and settings icons sit beside each league's title.
 - Back links on Create league, Join league, the round page (to Results) and admin sub-pages.
+- League leaderboards tick league-mates who have saved predictions while the current round is open, with an "in: 3 of 8" count.
+- Shared ranks show as "=3" on leaderboards and "=3rd of 7" on the Leagues page.
+- The round page reloads itself every 2 minutes, while visible, when a session is live or its results are still arriving.
+- Leaving the predictions form with unsaved changes asks for confirmation.
+- The heatmap opens at the latest rounds; success messages fade out; the menu marks the current section.
 - Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
 ### Fixed
