@@ -28,7 +28,7 @@
 
 {% macro phase_score_pill(points) %}
   {% if points is not none %}
-    <span class="total-score-pill total-score-pill--phase">{{ points }}</span>
+    <span class="total-score-pill total-score-pill--phase">{{ points }}<span class="unit">pts</span></span>
   {% endif %}
 {% endmacro %}
 
@@ -100,9 +100,11 @@
     <h3>Sprint Race</h3>
     {% set sr = sessions.get(SESSION_SPRINT_RACE) %}
     <div class="row">
+      {% if not (sr and sr.status.value == 'completed') %}
       <span class="{{ (sr.status if sr else None)|session_status_class }}">
         {{ sr|session_status_detail }}
       </span>
+      {% endif %}
       {{ phase_score_pill(state.sprint_points) }}
     </div>
   </div>
@@ -136,9 +138,11 @@
     <h3>Qualifying</h3>
     {% set quali = sessions.get(SESSION_QUALI) %}
     <div class="row">
+      {% if not (quali and quali.status.value == 'completed') %}
       <span class="{{ (quali.status if quali else None)|session_status_class }}">
         {{ quali|session_status_detail }}
       </span>
+      {% endif %}
       {{ phase_score_pill(state.quali_points) }}
     </div>
   </div>
@@ -231,9 +235,11 @@
     <h3>Race</h3>
     {% set race = sessions.get(SESSION_RACE) %}
     <div class="row">
+      {% if not (race and race.status.value == 'completed') %}
       <span class="{{ (race.status if race else None)|session_status_class }}">
         {{ race|session_status_detail }}
       </span>
+      {% endif %}
       {{ phase_score_pill(state.race_points) }}
     </div>
   </div>

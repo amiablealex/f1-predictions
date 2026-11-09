@@ -123,6 +123,54 @@ def _users_share_a_league(a_id: int, b_id: int) -> bool:
 # =============================================================================
 
 
+@dataclass
+class ChartBar:
+    round: Round
+    points: int | None      # None: not scored yet, or sat out
+    height: float           # % of chart height
+    kind: str               # 'scored' | 'missed' | 'future'
+
+
+def _season_chart(season: int, user_id: int) -> dict | None:
+    """One column per round of the calendar; bars fill in as rounds are
+    scored, unplayed rounds show as dots. None until anything is scored."""
+    rounds = (
+        db.session.query(Round)
+        .filter(Round.season == season)
+        .order_by(Round.round_number.asc())
+        .all()
+    )
+    scored_ids = {r.id for r in rounds if r.state in (RoundState.IN_PROGRESS, RoundState.COMPLETED)}
+    if not scored_ids:
+        return None
+
+    mine = {
+        rid: int(pts) for rid, pts in db.session.query(
+            PredictionScore.round_id, func.coalesce(func.sum(PredictionScore.points), 0),
+        )
+        .filter(PredictionScore.user_id == user_id, PredictionScore.round_id.in_(scored_ids))
+        .group_by(PredictionScore.round_id)
+        .all()
+    }
+    scale = max(25, -(-max(mine.values(), default=0) // 25) * 25)   # next multiple of 25
+
+    bars = []
+    for r in rounds:
+        pts = mine.get(r.id)
+        kind = "future" if r.id not in scored_ids else ("missed" if pts is None else "scored")
+        bars.append(ChartBar(round=r, points=pts, height=round(100 * (pts or 0) / scale, 1), kind=kind))
+
+    total = sum(mine.values())
+    return {
+        "bars": bars,
+        "scale": scale,
+        "total": total,
+        # Same basis as the leaderboard's pprp: rounds with any score row.
+        "per_round": round(total / len(mine), 1) if mine else None,
+        "label_rounds": {1, len(rounds)} | {n for n in range(5, len(rounds), 5)},
+    }
+
+
 @rounds_bp.route("/results")
 @login_required
 def list():
@@ -130,6 +178,7 @@ def list():
     rows = _build_list_rows(season, current_user.id)
     return render_template(
         "rounds/list.html",
+        chart=_season_chart(season, current_user.id),
         rows=rows,
         season=season,
         is_self=True,
@@ -153,6 +202,7 @@ def list_friend(username: str):
     rows = _build_list_rows(season, friend.id)
     return render_template(
         "rounds/list.html",
+        chart=_season_chart(season, friend.id),
         rows=rows,
         season=season,
         is_self=False,

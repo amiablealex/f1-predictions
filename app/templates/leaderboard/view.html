@@ -112,15 +112,15 @@
       <div></div>
       <div class="leaderboard-row__cols small muted">
         {% if last_scored %}
-          <span>Last (R{{ last_scored.round_number }})</span>
+          <span class="lb-col lb-col--last">Last (R{{ last_scored.round_number }})</span>
         {% endif %}
-        <span>Total</span>
+        <span class="lb-col lb-col--total">Total</span>
         {% if view_kind == 'total' %}
-          <span class="leaderboard-row__pprp-head">
-            pprp
+          <span class="lb-col lb-col--pprp leaderboard-row__pprp-head">
             <button type="button" class="tooltip-trigger"
                     aria-label="What is this?" aria-expanded="false"
                     data-tooltip="Points per round participated — your average score across only the rounds you made at least one prediction in. Rounds you sat out don't count.">i</button>
+            pprp
           </span>
         {% endif %}
       </div>
@@ -149,20 +149,20 @@
               <a href="{{ url_for('rounds.view',
                                   season=last_scored.season,
                                   round_number=last_scored.round_number) }}"
-                 class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
+                 class="tabular lb-col lb-col--last leaderboard-row__last leaderboard-row__last-link">{{ row.last_score }}</a>
             {% elif row.user_id in linkable_ids %}
               <a href="{{ url_for('rounds.view_friend',
                                   season=last_scored.season,
                                   round_number=last_scored.round_number,
                                   username=row.username) }}"
-                 class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</a>
+                 class="tabular lb-col lb-col--last leaderboard-row__last leaderboard-row__last-link">{{ row.last_score }}</a>
             {% else %}
-              <span class="tabular pill pill--p2 leaderboard-row__last-link">{{ row.last_score }}</span>
+              <span class="tabular lb-col lb-col--last leaderboard-row__last leaderboard-row__last-link">{{ row.last_score }}</span>
             {% endif %}
           {% endif %}
-          <span class="tabular pill pill--p10">{{ row.score }}</span>
+          <span class="tabular lb-col lb-col--total leaderboard-row__total">{{ row.score }}</span>
           {% if view_kind == 'total' %}
-            <span class="tabular leaderboard-row__pprp">{{ row.pprp if row.pprp is not none else '—' }}</span>
+            <span class="tabular lb-col lb-col--pprp leaderboard-row__pprp">{{ row.pprp if row.pprp is not none else '—' }}</span>
           {% endif %}
         </div>
       </div>

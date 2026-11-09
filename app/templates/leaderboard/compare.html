@@ -66,8 +66,6 @@
                   <td class="compare__cell{% if u.is_self %} compare__cell--self{% endif %}">
                     {% if cell is none %}
                       <span class="pill pill--p0 muted">—</span>
-                    {% elif cell.is_exact %}
-                      <span class="pill pill--exact" aria-label="exact match">✓</span>
                     {% else %}
                       <span class="{{ cell.points|points_class(row.category) }}">{% if cell.points > 0 %}+{% endif %}{{ cell.points }}</span>
                     {% endif %}

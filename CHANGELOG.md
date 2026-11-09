@@ -18,6 +18,10 @@
 - The round page reloads itself every 2 minutes, while visible, when a session is live or its results are still arriving.
 - Leaving the predictions form with unsaved changes asks for confirmation.
 - The heatmap opens at the latest rounds; success messages fade out; the menu marks the current section.
+- Results opens with a season chart: one muted bar per scored round across the full calendar, dots for rounds to come, with total points and points per round participated.
+
+### Changed
+- Design language: coloured pills now mean points only. A hit (top bucket) is solid moss, partial credit keeps its tint, a miss is plain muted text, and the compare grid shows the hit pill instead of a tick. Totals are plain numerals (leaderboard columns now line up under their headings); the Results list keeps its shaded round-score chip. Statuses are a small dot and quiet text, shown only when not completed; session times are plain text. Empty prediction fields are marked in ochre rather than red.
 - Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
 ### Fixed

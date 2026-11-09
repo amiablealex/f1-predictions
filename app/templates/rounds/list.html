@@ -8,6 +8,33 @@
 
 <h1>{{ season }} season</h1>
 
+{% if chart %}
+  <figure class="season-chart" aria-label="Points per round this season">
+    <figcaption class="season-chart__summary small muted">
+      <span><strong class="tabular">{{ chart.total }}</strong> pts</span>
+      {% if chart.per_round is not none %}<span><strong class="tabular">{{ chart.per_round }}</strong> per round participated</span>{% endif %}
+    </figcaption>
+    <div class="season-chart__plot">
+      <span class="season-chart__scale xs muted tabular">{{ chart.scale }}</span>
+      {% for b in chart.bars %}
+        {% if b.kind == 'future' %}
+          <span class="season-chart__col season-chart__col--future" title="R{{ b.round.round_number }} · {{ b.round.gp_name }}"></span>
+        {% else %}
+          {% set href = url_for('rounds.view', season=b.round.season, round_number=b.round.round_number) if is_self
+                        else url_for('rounds.view_friend', season=b.round.season, round_number=b.round.round_number, username=viewed_user.username) %}
+          <a class="season-chart__col season-chart__col--{{ b.kind }}" href="{{ href }}"
+             title="R{{ b.round.round_number }} · {{ b.round.gp_name }}: {{ b.points if b.points is not none else 'no entry' }}">
+            {% if b.points is not none %}<span class="season-chart__bar" style="height: {{ b.height }}%"></span>{% endif %}
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="season-chart__axis xs muted tabular" aria-hidden="true">
+      {% for b in chart.bars %}<span>{% if b.round.round_number in chart.label_rounds %}{{ b.round.round_number }}{% endif %}</span>{% endfor %}
+    </div>
+  </figure>
+{% endif %}
+
 <section class="card">
   {% if not rows %}
     <p class="muted">
@@ -40,11 +67,9 @@
           {% endif %}
         </div>
         <div class="rounds-list-row__right">
-          <span class="{{ row.status_class }}">{{ row.status_label }}</span>
+          {% if "completed" not in row.status_class %}<span class="{{ row.status_class }}">{{ row.status_label }}</span>{% endif %}
           {% if row.points is not none %}
-            <span class="pill pill--p10 tabular">{{ row.points }}</span>
-          {% else %}
-            <span class="muted small tabular">—</span>
+            <span class="pill score-chip tabular">{{ row.points }}</span>
           {% endif %}
         </div>
       </a>

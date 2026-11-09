@@ -304,3 +304,41 @@ def test_menu_marks_current_section(client, make_user, login):
     html = client.get("/leagues/").get_data(as_text=True)
     assert 'class="drawer__link" aria-current="page">Leagues<' in html
     assert html.count('aria-current="page"') == 1
+
+
+# --------------------------------------------------------------- results chart
+
+
+def test_season_chart_none_before_any_scored_round(app, db, make_user):
+    from app.rounds.routes import _season_chart
+    user = make_user()
+    _open_round(db, 3)
+    assert _season_chart(2026, user.id) is None
+
+
+def test_season_chart_bars(app, db, trio):
+    from app.rounds.routes import _season_chart
+    alice, bob, _ = trio
+    r1, r2 = _round(db, 1), _round(db, 2)
+    _open_round(db, 3)
+    _score(db, alice, r1, 40)
+    _score(db, bob, r2, 30)          # alice sat out R2
+    chart = _season_chart(2026, alice.id)
+    assert [b.kind for b in chart["bars"]] == ["scored", "missed", "future"]
+    assert chart["total"] == 40 and chart["per_round"] == 40.0
+    assert chart["scale"] == 50 and chart["bars"][0].height == 80.0
+
+
+def test_results_page_chart_and_quiet_states(client, login, db, trio):
+    alice, _, _ = trio
+    rd = _round(db, 1)
+    rd.predictions_locked = True     # the list shows locked rounds only
+    db.session.commit()
+    _score(db, alice, rd, 42)
+    login()
+    html = client.get("/results").get_data(as_text=True)
+    assert 'class="season-chart"' in html
+    assert "per round participated" in html
+    assert "score-chip" in html
+    # A completed round's status isn't repeated on every row.
+    assert "pill--status-completed" not in html
