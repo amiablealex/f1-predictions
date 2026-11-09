@@ -350,6 +350,66 @@ def _poll_session(app: Flask, client: JolpicaClient, s: Session, provisional_on:
     _commit_and_score(app, s)
 
 
+_RECHECK_TYPES = (SessionType.QUALIFYING, SessionType.SPRINT_RACE, SessionType.RACE)
+
+
+def results_recheck_job(app: Flask, client: JolpicaClient) -> None:
+    """Re-fetch completed sessions from the last RESULTS_RECHECK_DAYS and
+    re-score any that Jolpica has changed.
+
+    Completed sessions are otherwise never fetched again, so a post-race
+    penalty applied days later was missed (2026 R6, R7, R9). A re-fetch
+    that would lose data (fewer rows, or an input that was present going
+    missing) is discarded, as is anything Jolpica serves mid-edit.
+    """
+    with app.app_context():
+        days = current_app.config.get("RESULTS_RECHECK_DAYS", 7)
+        now = _utcnow()
+        session_ids = [
+            sid for (sid,) in db.session.query(Session.id)
+            .filter(
+                Session.status == SessionStatus.COMPLETED,
+                Session.session_type.in_(_RECHECK_TYPES),
+                Session.scheduled_start >= now - timedelta(days=days),
+                Session.scheduled_start <= now,
+            )
+            .order_by(Session.scheduled_start)
+            .all()
+        ]
+        for sid in session_ids:
+            s = db.session.get(Session, sid)
+            if s is not None and s.status == SessionStatus.COMPLETED:
+                _recheck_session(app, client, s)
+
+
+def _recheck_session(app: Flask, client: JolpicaClient, s: Session) -> None:
+    label = f"{s.session_type.value} round {s.round.round_number}"
+    before = _results_signature(s)
+    missing_before = missing_inputs(s)
+    try:
+        _fetch_and_ingest_session(client, s.round, s, gate=False)
+    except JolpicaError as exc:
+        db.session.rollback()
+        log.info("results_recheck: %s not re-checked: %s", label, exc)
+        return
+    db.session.flush()
+    after = _results_signature(s)
+    if after == before:
+        db.session.rollback()
+        return
+    lost = missing_inputs(s) - missing_before
+    if len(after[0]) < len(before[0]) or lost:
+        db.session.rollback()
+        log.warning(
+            "results_recheck: %s re-fetch discarded, it would lose data (rows %d -> %d, newly missing: %s)",
+            label, len(before[0]), len(after[0]), describe_missing(lost) if lost else "none",
+        )
+        return
+    log.warning("results_recheck: %s changed upstream; re-scoring", label)
+    s.status = SessionStatus.COMPLETED
+    _commit_and_score(app, s)
+
+
 def _results_signature(s: Session) -> tuple:
     """Everything an ingest can change for a session, read from the DB.
 

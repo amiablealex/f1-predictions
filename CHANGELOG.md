@@ -10,6 +10,7 @@
 - Admin lineup editor on the round page: relist a seat under a different driver for this round or for the rest of the season. Picks follow the seat. An "Add driver" form creates a debutant Jolpica doesn't know yet; their Jolpica record claims it on first appearance (matched on family name). Locked rounds show who drove each seat.
 - `flask repair-seats`: one-off repair for lineups rewritten from results. Restores each played round's lineup from the first unplayed round, re-fetches results, recomputes specials and re-scores. Reports changed result rows, pit stops and special outcomes per round, and point changes by prediction type and by user. `--rounds` limits it to given rounds. Dry run unless `--apply`.
 - Round page footnote lists the round's stand-ins ("TSU for LAW (RB F1 Team)").
+- Results recheck (`results_recheck` in the `sync` cron group): completed sessions from the last `RESULTS_RECHECK_DAYS` (default 7) are re-fetched and re-scored if Jolpica has changed them, so post-race penalties are picked up. A re-fetch that would lose data, or that Jolpica serves mid-edit, is discarded.
 
 ### Fixed
 - Substitutions. Picks are seats, and a seat is now matched to whoever drove it by team (`app/seats.py`) instead of by car number, which follows the driver in F1. A pick of an ill or replaced driver scores their stand-in; a promotion between teams (RB driver to Red Bull, reserve into RB) resolves within each team.

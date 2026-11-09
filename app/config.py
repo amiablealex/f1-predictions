@@ -118,6 +118,9 @@ class Config:
     # Hours after session start when a provisional session is finalised
     # with whatever data exists.
     RESULTS_FINALISE_AFTER_HOURS = _env_int("RESULTS_FINALISE_AFTER_HOURS", 48)
+    # Completed sessions this recent are re-fetched on every sync run and
+    # re-scored if Jolpica has changed them (post-race penalties).
+    RESULTS_RECHECK_DAYS = _env_int("RESULTS_RECHECK_DAYS", 7)
 
     # Estimated session durations — used to transition status from
     # `in_progress` to `pending_results`.

@@ -2,7 +2,7 @@
 
 Usage:
     python -m worker.run_once frequent   # session state, deadline lock, results poll
-    python -m worker.run_once sync       # schedule + driver master sync
+    python -m worker.run_once sync       # schedule + driver sync, results recheck
 
 Railway cron runs the start command on a schedule and expects the process to
 exit when done; an execution still running blocks the next one. So: run the
@@ -23,6 +23,7 @@ from worker.jobs import (
     deadline_lock_job,
     driver_master_sync_job,
     results_poll_job,
+    results_recheck_job,
     schedule_sync_job,
     session_state_transitions_job,
 )
@@ -43,6 +44,7 @@ GROUPS = {
     "sync": [
         ("schedule_sync", schedule_sync_job),
         ("driver_master_sync", driver_master_sync_job),
+        ("results_recheck", results_recheck_job),
     ],
 }
 

@@ -28,6 +28,7 @@ from worker.jobs import (
     deadline_lock_job,
     driver_master_sync_job,
     results_poll_job,
+    results_recheck_job,
     schedule_sync_job,
     session_state_transitions_job,
 )
@@ -70,6 +71,14 @@ def main() -> int:
         trigger=IntervalTrigger(hours=24),
         id="driver_master_sync",
         next_run_time=soon + timedelta(seconds=20),
+        max_instances=1,
+        coalesce=True,
+    )
+    sched.add_job(
+        lambda: _safe_run("results_recheck", results_recheck_job, app, client),
+        trigger=IntervalTrigger(hours=app.config["SCHEDULE_SYNC_INTERVAL_HOURS"]),
+        id="results_recheck",
+        next_run_time=soon + timedelta(seconds=40),
         max_instances=1,
         coalesce=True,
     )
