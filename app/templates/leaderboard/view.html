@@ -117,7 +117,7 @@
         {% if last_scored %}
           <span class="lb-col lb-col--last">Last (R{{ last_scored.round_number }})</span>
         {% endif %}
-        <span class="lb-col lb-col--total">{% if view_kind == 'total' %}Total (pprp){% else %}Total{% endif %}</span>
+        <span class="lb-col lb-col--total{% if view_kind != 'total' %} lb-col--narrow{% endif %}">{% if view_kind == 'total' %}Total (pprp){% else %}Total{% endif %}</span>
       </div>
     </div>
 
@@ -155,7 +155,7 @@
               <span class="tabular lb-col lb-col--last leaderboard-row__last leaderboard-row__last-link">{{ row.last_score }}</span>
             {% endif %}
           {% endif %}
-          <span class="tabular lb-col lb-col--total">
+          <span class="tabular lb-col lb-col--total{% if view_kind != 'total' %} lb-col--narrow{% endif %}">
             <strong class="leaderboard-row__total">{{ row.score }}</strong>
             {%- if view_kind == 'total' and row.pprp is not none %} <span class="leaderboard-row__pprp">({{ row.pprp }})</span>{% endif %}
           </span>
