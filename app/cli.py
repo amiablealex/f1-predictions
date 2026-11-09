@@ -6,6 +6,7 @@ import logging
 import click
 from flask import current_app
 from flask.cli import with_appcontext
+from sqlalchemy import func
 
 from app.api.exceptions import JolpicaError, JolpicaNotFoundError
 from app.api.jolpica import build_default_client
@@ -306,3 +307,188 @@ def seed_test_predictions(user_id, season, round_number):
         if s and s.status == SessionStatus.COMPLETED:
             phase_scoring_job(current_app._get_current_object(), rd.id, phase)
             click.echo(f"  re-scored phase {phase.value}")
+
+
+# =============================================================================
+# repair-seats — one-off fix for lineups rewritten from results
+# =============================================================================
+
+
+@click.command("repair-seats")
+@click.option("--season", type=int, default=None, help="Defaults to F1_SEASON.")
+@click.option("--reference-round", type=int, default=None,
+              help="Round whose lineup is the true one (default: first round with no results).")
+@click.option("--refetch/--no-refetch", default=True,
+              help="Re-fetch results from Jolpica (fills team names and missing debut rows).")
+@click.option("--apply", "apply_", is_flag=True,
+              help="Commit. Without it everything runs in a transaction that is rolled back.")
+@with_appcontext
+def repair_seats(season, reference_round, refetch, apply_):
+    """Restore each played round's lineup to what the form showed, re-fetch
+    results, recompute specials and re-score, then report every user's
+    point change per round.
+
+    Before seat scoring, the worker rewrote a round's lineup from its first
+    results: stand-ins were added as extra seats and promoted drivers had
+    their seat's team overwritten. The lineup of a round that has no
+    results yet was never touched, so it is the reference: seats whose
+    driver isn't in it are removed, and teams are restored from it.
+
+    Run this before using the lineup editor on any round, since an edited
+    round can't serve as the reference.
+    """
+    from app.models.prediction import PredictionScore
+    from app.models.round import Session as RoundSession
+    from app.models.user import User
+    from app.seats import substitutions
+    from worker.ingest import session_triggers_phase
+    from worker.jobs import _fetch_and_ingest_session, _phase_scoring_inner
+
+    season = season or current_app.config["F1_SEASON"]
+    rounds = (
+        db.session.query(Round).filter(Round.season == season)
+        .order_by(Round.round_number).all()
+    )
+    played_types = (SessionType.QUALIFYING, SessionType.SPRINT_RACE, SessionType.RACE)
+
+    def played(rd):
+        return [s for s in rd.sessions if s.session_type in played_types and s.results]
+
+    if reference_round is None:
+        ref = next((r for r in rounds if r.round_drivers and not played(r)), None)
+    else:
+        ref = next((r for r in rounds if r.round_number == reference_round), None)
+    if ref is None or not ref.round_drivers:
+        click.echo("No reference round with a lineup found.", err=True)
+        return
+
+    def code(driver):
+        return (driver.code or driver.driver_ref[:3].upper()) if driver else "?"
+
+    ref_team = {s.expected_driver_id: s.constructor_name for s in ref.round_drivers}
+    click.echo(f"Season {season}. Reference lineup: R{ref.round_number}")
+    for s in sorted(ref.round_drivers, key=lambda s: (s.constructor_name or "", s.car_number)):
+        click.echo(f"  {s.constructor_name}: {code(s.expected_driver)}")
+    click.echo("")
+
+    def totals():
+        rows = (
+            db.session.query(Round.round_number, PredictionScore.user_id,
+                             func.coalesce(func.sum(PredictionScore.points), 0))
+            .join(Round, Round.id == PredictionScore.round_id)
+            .filter(Round.season == season)
+            .group_by(Round.round_number, PredictionScore.user_id)
+            .all()
+        )
+        return {(n, uid): int(p) for n, uid, p in rows}
+
+    before = totals()
+    client = build_default_client(current_app.config) if refetch else None
+    round_ids = [r.id for r in rounds if played(r)]
+
+    for rid in round_ids:
+        rd = db.session.get(Round, rid)
+        lines = []
+
+        # 1. Lineup back to what the form showed.
+        protected = {rd.random_quali_driver_id, rd.qh2h_driver_a_id, rd.qh2h_driver_b_id}
+        for seat in list(rd.round_drivers):
+            label = f"{code(seat.expected_driver)} ({seat.constructor_name})"
+            if seat.expected_driver_id not in ref_team:
+                if seat.id in protected:
+                    lines.append(f"KEEP {label}: used by a round selection, check by hand")
+                    continue
+                if _round_has_picks_of(rd.id, seat.expected_driver_id):
+                    lines.append(f"KEEP {label}: has picks, check by hand")
+                    continue
+                lines.append(f"remove seat {label}")
+                db.session.delete(seat)
+            elif seat.constructor_name != ref_team[seat.expected_driver_id]:
+                lines.append(f"team {label} -> {ref_team[seat.expected_driver_id]}")
+                seat.constructor_name = ref_team[seat.expected_driver_id]
+        db.session.flush()
+        db.session.expire(rd, ["round_drivers"])
+
+        # 2. Re-fetch results (team names, debut rows), keeping statuses.
+        if client is not None:
+            for s in played(rd):
+                status, fetched = s.status, s.results_fetched_at
+                try:
+                    _fetch_and_ingest_session(client, rd, s, gate=False)
+                except JolpicaError as exc:
+                    lines.append(f"{s.session_type.value}: re-fetch failed ({exc}); kept old rows")
+                s.status, s.results_fetched_at = status, fetched
+            db.session.flush()
+
+        # 3. Specials, then every scored phase, from fresh state.
+        db.session.expire_all()
+        rd = db.session.get(Round, rid)
+        race = next((s for s in rd.sessions if s.session_type == SessionType.RACE), None)
+        if race is not None and race.results:
+            from app.models.pitstop import PitStop
+            from app.models.result import SessionResult
+            upsert_special_outcomes(
+                db.session, rd,
+                race_results=db.session.query(SessionResult).filter_by(session_id=race.id)
+                .order_by(SessionResult.position).all(),
+                pit_stops=db.session.query(PitStop).filter_by(round_id=rd.id).all(),
+            )
+            db.session.flush()
+            db.session.expire_all()
+        session_types = [
+            s.session_type for s in
+            db.session.query(RoundSession).filter_by(round_id=rid).all()
+            if s.status in (SessionStatus.COMPLETED, SessionStatus.PROVISIONAL)
+        ]
+        for st in session_types:
+            phase = session_triggers_phase(st)
+            if phase is not None:
+                _phase_scoring_inner(rid, phase, commit=False)
+        db.session.expire_all()
+
+        rd = db.session.get(Round, rid)
+        for s in played(rd):
+            for seat, r in substitutions(rd.round_drivers, s.results):
+                lines.append(
+                    f"{s.session_type.value}: {code(r.actual_driver)} drove "
+                    f"{code(seat.expected_driver)}'s seat ({seat.constructor_name})"
+                )
+        if lines:
+            click.echo(f"R{rd.round_number}")
+            for line in lines:
+                click.echo(f"  {line}")
+
+    after = totals()
+    names = {u.id: u.username for u in db.session.query(User).all()}
+    changes = sorted(
+        (n, uid, before.get((n, uid), 0), after.get((n, uid), 0))
+        for (n, uid) in set(before) | set(after)
+        if before.get((n, uid), 0) != after.get((n, uid), 0)
+    )
+    click.echo("\nPoint changes")
+    if not changes:
+        click.echo("  none")
+    season_delta: dict[int, int] = {}
+    for n, uid, b, a in changes:
+        click.echo(f"  R{n:<3} {names.get(uid, uid):<20} {b:>4} -> {a:<4} ({a - b:+d})")
+        season_delta[uid] = season_delta.get(uid, 0) + a - b
+    if season_delta:
+        click.echo("\nSeason totals")
+        for uid, delta in sorted(season_delta.items(), key=lambda kv: -kv[1]):
+            click.echo(f"  {names.get(uid, uid):<20} {delta:+d}")
+
+    if apply_:
+        db.session.commit()
+        click.echo("\nApplied.")
+    else:
+        db.session.rollback()
+        click.echo("\nDry run: rolled back. Re-run with --apply to commit.")
+
+
+def _round_has_picks_of(round_id: int, driver_id: int) -> bool:
+    from app.lineups import PICK_MODELS
+
+    return any(
+        db.session.query(m.id).filter(m.round_id == round_id, m.predicted_driver_id == driver_id).first()
+        for m in PICK_MODELS
+    )

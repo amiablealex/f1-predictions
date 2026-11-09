@@ -207,8 +207,99 @@ def round_detail(round_id: int):
     return render_template(
         "admin/round.html",
         rd=rd, quali=quali, missing=missing,
+        lineup=_lineup_view(rd),
         bare_csrf=FlaskForm(), title=f"Admin · R{rd.round_number}",
     )
+
+
+def _lineup_view(rd: Round) -> dict:
+    """Seats in team order, plus who drove each in the latest session
+    with results (locked rounds) or the driver options (open rounds)."""
+    from app.lineups import is_open, season_drivers
+    from app.seats import resolve_seats
+
+    seats = sorted(rd.round_drivers, key=lambda s: ((s.constructor_name or ""), s.car_number))
+    order = (SessionType.RACE, SessionType.SPRINT_RACE, SessionType.QUALIFYING)
+    latest = next(
+        (s for st in order for s in rd.sessions if s.session_type == st and s.results),
+        None,
+    )
+    drove = {}
+    if latest is not None:
+        drove = {
+            seat.id: r.actual_driver
+            for seat, r in resolve_seats(seats, latest.results).items()
+        }
+    editable = is_open(rd)
+    return {
+        "seats": seats,
+        "editable": editable,
+        "drivers": season_drivers(rd.season) if editable else [],
+        "drove": drove,
+        "drove_session": latest.session_type.value.replace("_", " ") if latest else None,
+    }
+
+
+@admin_bp.route("/round/<int:round_id>/lineup", methods=["POST"])
+@login_required
+@admin_required
+def round_lineup(round_id: int):
+    """Relist seats under different drivers; picks follow the seat."""
+    from app.lineups import LineupError, update_lineup
+
+    if not FlaskForm().validate_on_submit():
+        abort(400)
+    rd = _round_or_404(round_id)
+    changes: dict[int, int] = {}
+    for key, value in request.form.items():
+        if key.startswith("seat_"):
+            try:
+                changes[int(key[5:])] = int(value)
+            except ValueError:
+                abort(400)
+    scope = "season" if request.form.get("scope") == "season" else "round"
+    try:
+        result = update_lineup(rd, changes, scope)
+    except LineupError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return _back(round_id)
+    db.session.commit()
+    if not result.rounds:
+        flash("Lineup unchanged.", "info")
+    else:
+        flash(
+            f"Updated {result.seats} seat(s) across R"
+            + ", R".join(str(n) for n in result.rounds)
+            + f"; moved {result.picks} pick(s) with their seats.",
+            "success",
+        )
+    return _back(round_id)
+
+
+@admin_bp.route("/round/<int:round_id>/add-driver", methods=["POST"])
+@login_required
+@admin_required
+def round_add_driver(round_id: int):
+    """Create a driver Jolpica doesn't know yet, for the lineup editor."""
+    from app.lineups import LineupError, add_placeholder_driver
+
+    if not FlaskForm().validate_on_submit():
+        abort(400)
+    _round_or_404(round_id)
+    try:
+        d = add_placeholder_driver(
+            request.form.get("given_name", ""),
+            request.form.get("family_name", ""),
+            request.form.get("code", ""),
+        )
+    except LineupError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+        return _back(round_id)
+    db.session.commit()
+    flash(f"Added {d.code} · {d.family_name}. Pick them in a seat below.", "success")
+    return _back(round_id)
 
 
 @admin_bp.route("/round/<int:round_id>/lock-toggle", methods=["POST"])

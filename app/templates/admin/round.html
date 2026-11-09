@@ -80,4 +80,67 @@
   </form>
 </section>
 {% endif %}
+
+<section class="card">
+  <h3>Lineup</h3>
+  {% if lineup.editable %}
+    <p class="small muted" style="margin-top:0;">
+      Who each seat is listed under on the form. Changing a seat's driver moves existing picks with it.
+      Not needed for a stand-in after the deadline: scoring follows the seat on its own.
+    </p>
+    <form method="post" action="{{ url_for('admin.round_lineup', round_id=rd.id) }}" style="margin:0;">
+      {{ bare_csrf.hidden_tag() }}
+      {% for seat in lineup.seats %}
+        <div class="admin-user-row">
+          <div class="admin-user-row__main">
+            <div class="admin-user-row__name">{{ seat.constructor_name or '—' }}</div>
+          </div>
+          <div class="admin-user-row__actions">
+            <select name="seat_{{ seat.id }}" class="field__select">
+              {% for d in lineup.drivers %}
+                <option value="{{ d.id }}" {% if d.id == seat.expected_driver_id %}selected{% endif %}>{{ d|driver_label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      {% endfor %}
+      <div class="field__radios" style="flex-direction:column;align-items:flex-start;margin:var(--space-2) 0;">
+        <label class="radio"><input type="radio" name="scope" value="round" checked> This round only (e.g. illness announced early)</label>
+        <label class="radio"><input type="radio" name="scope" value="season"> This and all later rounds (e.g. replacement)</label>
+      </div>
+      <button type="submit" class="btn btn--small btn--primary">Save lineup</button>
+    </form>
+
+    <h3 style="margin-top:var(--space-4);">Add driver</h3>
+    <p class="small muted" style="margin-top:0;">
+      Only for someone not in the list above (never raced this season). Jolpica's record replaces this one, matched on family name, once they race.
+    </p>
+    <form method="post" action="{{ url_for('admin.round_add_driver', round_id=rd.id) }}" class="row" style="gap:6px;margin:0;flex-wrap:wrap;">
+      {{ bare_csrf.hidden_tag() }}
+      <input type="text" name="given_name" placeholder="Given name" autocomplete="off" class="field__input" style="flex:1 1 8rem;min-width:0;">
+      <input type="text" name="family_name" placeholder="Family name" autocomplete="off" class="field__input" style="flex:1 1 8rem;min-width:0;">
+      <input type="text" name="code" placeholder="ABC" maxlength="3" autocomplete="off" class="field__input" style="flex:0 0 4.5rem;text-transform:uppercase;">
+      <button type="submit" class="btn btn--small btn--secondary">Add</button>
+    </form>
+  {% else %}
+    <p class="small muted" style="margin-top:0;">
+      Predictions closed; lineup fixed.
+      {% if lineup.drove_session %}Checked against {{ lineup.drove_session }} results.{% endif %}
+    </p>
+    {% for seat in lineup.seats %}
+      {% set drove = lineup.drove.get(seat.id) %}
+      <div class="admin-user-row">
+        <div class="admin-user-row__main">
+          <div class="admin-user-row__name">{{ seat.expected_driver|driver_label }}</div>
+          <div class="xs muted">{{ seat.constructor_name or '—' }}</div>
+        </div>
+        <div class="admin-user-row__actions xs{% if not (drove and drove.id != seat.expected_driver_id) %} muted{% endif %}">
+          {% if lineup.drove_session %}
+            {% if drove is none %}no result{% elif drove.id != seat.expected_driver_id %}driven by {{ drove|driver_label }}{% else %}✓{% endif %}
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</section>
 {% endblock %}

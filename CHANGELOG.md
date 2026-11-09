@@ -7,8 +7,19 @@
 - Qualifying is checked for a pole time, and an admin can enter one manually when Jolpica has no quali times. A published time replaces it on re-fetch.
 - Admin round page (`/admin/round/<id>`) with session status, missing inputs, Refresh, Finalise and the pole-time form. The dashboard lists rounds with a "Needs attention" section; worker triggers are collapsed.
 - Leaderboard note when totals include provisional points.
+- Admin lineup editor on the round page: relist a seat under a different driver for this round or for the rest of the season. Picks follow the seat. An "Add driver" form creates a debutant Jolpica doesn't know yet; their Jolpica record claims it on first appearance (matched on family name). Locked rounds show who drove each seat.
+- `flask repair-seats`: one-off repair for lineups rewritten from results. Restores each played round's lineup from the first unplayed round, re-fetches results, recomputes specials, re-scores and reports every point change. Dry run unless `--apply`.
+- Round page footnote lists the round's stand-ins ("TSU for LAW (RB F1 Team)").
+
+### Fixed
+- Substitutions. Picks are seats, and a seat is now matched to whoever drove it by team (`app/seats.py`) instead of by car number, which follows the driver in F1. A pick of an ill or replaced driver scores their stand-in; a promotion between teams (RB driver to Red Bull, reserve into RB) resolves within each team.
+- The worker no longer rewrites a round's lineup from its first results. It added stand-ins as extra seats after the deadline and overwrote a promoted driver's team.
+- A debutant's results are no longer skipped: drivers missing from the master list are created from the result rows.
+- Longest-stint special read a stand-in's pit stops under the regular's id; biggest-team-gap ignored stand-ins.
 
 ### Changed
+- `session_results.constructor_name` added; `uq_round_driver` is deferrable so seats can swap drivers in one save.
+- Rules page: substitution rule reworded (no "car 44").
 - Round page status banners shortened and reworded for players: "Session live · points follow the result", "Awaiting official results", "Provisional points · may change".
 - Session pill reads "awaiting results" instead of "results pending"; new "provisional" pill and round-list status.
 - Race specials are computed from freshly queried results and pit stops rather than relationship collections.
