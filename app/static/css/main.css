@@ -1159,7 +1159,11 @@ p { margin: 0 0 var(--space-3) 0; }
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
-.page-head h1 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.page-head { align-items: flex-start; }
+.page-head__title { min-width: 0; }
+.page-head h1 { margin: 0; overflow-wrap: anywhere; }
+.page-head__sub { margin: 2px 0 0; }
+.page-head__actions { margin-top: 4px; }
 .page-head__actions {
   display: flex;
   gap: var(--space-1);

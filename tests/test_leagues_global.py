@@ -268,12 +268,12 @@ def test_submitted_ticks_on_league_board_only(client, login, db, trio):
     db.session.commit()
     login()
     html = client.get(f"/leaderboard/{league.id}").get_data(as_text=True)
-    assert f"Predictions in for R{rd.round_number}: 1 of 2" in html
+    assert f"2 players · R{rd.round_number} predictions: 1 in" in html
     assert html.count('class="submitted-tick"') == 1
     heat = client.get(f"/leaderboard/{league.id}?view=heatmap").get_data(as_text=True)
-    assert "Predictions in for R" in heat
+    assert "predictions: 1 in" in heat
     glob = client.get("/leaderboard/global").get_data(as_text=True)
-    assert "submitted-tick" not in glob and "Predictions in for R" not in glob
+    assert "submitted-tick" not in glob and "predictions:" not in glob
 
 
 def test_no_ticks_without_open_round(client, login, db, trio):
@@ -282,7 +282,7 @@ def test_no_ticks_without_open_round(client, login, db, trio):
     _round(db, 1)
     login()
     html = client.get(f"/leaderboard/{league.id}").get_data(as_text=True)
-    assert "Predictions in for R" not in html
+    assert "predictions:" not in html and "2 players" in html
 
 
 @pytest.mark.parametrize("status, expect", [("PROVISIONAL", True), ("COMPLETED", False)])

@@ -2,7 +2,13 @@
 {% block content %}
 <a class="back-link" href="{{ url_for('leagues.index') }}">‹ Leagues</a>
 <div class="page-head">
-  <h1>{{ board_name }}</h1>
+  <div class="page-head__title">
+    <h1>{{ board_name }}</h1>
+    <p class="page-head__sub small muted">
+      {{ member_count }} player{{ 's' if member_count != 1 }}
+      {%- if open_round %} · R{{ open_round.round_number }} predictions: {{ submitted_ids|length }} in{% endif %}
+    </p>
+  </div>
   {% if league %}
     <div class="page-head__actions">
       <button type="button" class="icon-btn" data-share-league
@@ -32,12 +38,6 @@
 {% if league %}
   {% set active_tab = view_kind %}
   {% include "leaderboard/_tabs.html" %}
-{% endif %}
-
-{% if open_round %}
-  <p class="small muted submitted-note">
-    Predictions in for R{{ open_round.round_number }}: {{ submitted_ids|length }} of {{ member_count }}
-  </p>
 {% endif %}
 
 {% if provisional_note and view_kind != 'heatmap' %}
