@@ -301,6 +301,10 @@ def test_repair_seats_refetch_fills_legacy_rows(app, db, make_user, monkeypatch)
 
     out = app.test_cli_runner().invoke(args=["repair-seats", "--season", "2026", "--apply"])
     assert "ROO drove OCO's seat" in out.output, out.output
+    assert "race data changed: P1 VER grid/laps" in out.output        # re-fetch filled grid + laps
+    assert "P6 new ROO" in out.output
+    assert "team filled" not in out.output                       # re-fetched rows carry teams
+    assert "race_top10" in out.output.split("by prediction type")[1]
     _db.session.expire_all()
     race = _db.session.get(type(race), race.id)
     assert race.status == SessionStatus.COMPLETED
@@ -356,7 +360,7 @@ def test_repair_seats_fills_team_when_refetch_is_refused(app, db, make_user, mon
 
     monkeypatch.setattr(cli, "build_default_client", lambda config: Refusing(race=race))
     out = app.test_cli_runner().invoke(args=["repair-seats", "--season", "2026", "--apply"])
-    assert "qualifying: re-fetch failed" in out.output, out.output
+    assert "qualifying: re-fetch refused" in out.output, out.output
     assert "qualifying: team filled on 6 stored row(s)" in out.output
     assert "qualifying: HIR drove OCO's seat" in out.output
     _db.session.expire_all()
@@ -366,3 +370,24 @@ def test_repair_seats_fills_team_when_refetch_is_refused(app, db, make_user, mon
         round_id=r19.id, user_id=user.id, kind=PredictionType.QUALI_TOP3, position=3).one()
     exact = _db.session.get(Round, r19.id).scoring_config.quali_position_buckets[0]["points"]
     assert score.points == exact     # OCO picked P3; HIR, in OCO's seat, qualified P3
+
+
+def test_repair_seats_rounds_option_limits_scope(app, db, make_user):
+    from app.models.result import SessionResult
+
+    for n in (12, 13):
+        rd, d = _make_round(db, n, open_=False,
+                            race_start=datetime.now(timezone.utc) - timedelta(days=40 - n))
+        tsu = upsert_driver(db.session, _api_driver("tsu", 22))
+        db.session.flush()
+        db.session.add(RoundDriver(round_id=rd.id, car_number=22, expected_driver_id=tsu.id,
+                                   constructor_name=RB))
+        race = next(s for s in rd.sessions if s.session_type == SessionType.RACE)
+        db.session.add(SessionResult(session_id=race.id, position=1, car_number=1, actual_driver_id=d["ver"].id,
+                                     status="Finished", is_classified=True, is_fastest_lap=True))
+        race.status = SessionStatus.COMPLETED
+    _make_round(db, 21)
+    db.session.commit()
+
+    out = app.test_cli_runner().invoke(args=["repair-seats", "--season", "2026", "--no-refetch", "--rounds", "13"])
+    assert "R13" in out.output and "R12" not in out.output, out.output
