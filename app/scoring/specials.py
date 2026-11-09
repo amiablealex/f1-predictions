@@ -36,6 +36,7 @@ from app.models.prediction import SpecialPrediction
 from app.models.result import SessionResult
 from app.models.round import RoundScoringConfig
 from app.models.special import SpecialOutcome
+from app.seats import seat_by_result
 from app.specials import SPECIALS_BY_KEY
 
 
@@ -74,22 +75,16 @@ def _parse_driver_set(outcome: SpecialOutcome) -> set[int]:
 # =============================================================================
 
 
-def _driver_id_for_car(car_number: int, round_drivers: list[RoundDriver]) -> int | None:
-    """The expected driver for a given car number."""
-    for rd in round_drivers:
-        if rd.car_number == car_number:
-            return rd.expected_driver_id
-    return None
-
-
-def _car_for_predicted_driver(
-    predicted_driver_id: int, round_drivers: list[RoundDriver],
-) -> int | None:
-    """Inverse of the above — used for substitution-aware lookup."""
-    for rd in round_drivers:
-        if rd.expected_driver_id == predicted_driver_id:
-            return rd.car_number
-    return None
+def _seat_driver_by_result(
+    race_results: list[SessionResult], round_drivers: list[RoundDriver],
+) -> dict[SessionResult, int]:
+    """Result row → expected driver of the seat it scores for. Answers are
+    stored as seat drivers because picks are seats: if a stand-in retires
+    first, pickers of the regular he replaced win."""
+    return {
+        r: seat.expected_driver_id
+        for r, seat in seat_by_result(round_drivers, race_results).items()
+    }
 
 
 # =============================================================================
@@ -127,10 +122,10 @@ def _compute_first_retirement(
         outcome.no_result = True
         return outcome
     min_laps = min(r.laps_completed for r in retirees)
-    tied_cars = [r.car_number for r in retirees if r.laps_completed == min_laps]
+    owner = _seat_driver_by_result(race_results, round_drivers)
     driver_ids = [
-        d for d in (_driver_id_for_car(c, round_drivers) for c in tied_cars)
-        if d is not None
+        owner[r] for r in retirees
+        if r.laps_completed == min_laps and r in owner
     ]
     _store_driver_set(outcome, driver_ids)
     return outcome
@@ -140,6 +135,7 @@ def _compute_most_pitstops(
     round_id: int,
     pit_stops: list[PitStop],
     round_drivers: list[RoundDriver],
+    race_results: list[SessionResult] = (),
 ) -> SpecialOutcome:
     """Driver(s) with the highest pit-stop count. Ties form the answer set.
 
@@ -150,9 +146,14 @@ def _compute_most_pitstops(
     if not pit_stops:
         outcome.no_result = True
         return outcome
+    # Pit stops record who drove; count them against the seat driven.
+    seat_driver = {
+        r.actual_driver_id: d
+        for r, d in _seat_driver_by_result(list(race_results), round_drivers).items()
+    }
     counts: dict[int, int] = defaultdict(int)
     for stop in pit_stops:
-        counts[stop.driver_id] += 1
+        counts[seat_driver.get(stop.driver_id, stop.driver_id)] += 1
     max_count = max(counts.values())
     tied = [d for d, c in counts.items() if c == max_count]
     # Validate against the round lineup — exclude any driver_id not in
@@ -176,7 +177,7 @@ def _compute_last_classified(
         outcome.no_result = True
         return outcome
     last = max(classified, key=lambda r: r.position)
-    driver_id = _driver_id_for_car(last.car_number, round_drivers)
+    driver_id = _seat_driver_by_result(race_results, round_drivers).get(last)
     if driver_id is None:
         outcome.no_result = True
         return outcome
@@ -265,14 +266,16 @@ def _compute_longest_stint(
     for s in sorted(pit_stops, key=lambda x: (x.driver_id, x.stop_number)):
         stops_by_driver[s.driver_id].append(s.lap)
 
+    owner = _seat_driver_by_result(race_results, round_drivers)
     longest_per_driver: dict[int, int] = {}
     for result in race_results:
         if result.laps_completed is None:
             continue
-        driver_id = _driver_id_for_car(result.car_number, round_drivers)
+        driver_id = owner.get(result)
         if driver_id is None:
             continue
-        stop_laps = stops_by_driver.get(driver_id, [])
+        # Stops are keyed by who drove; the answer by the seat.
+        stop_laps = stops_by_driver.get(result.actual_driver_id, [])
         # Stint boundaries: race start (lap 0 → in pit on lap N1 → ...
         # → in pit on lap Nk → final lap). Stint k runs from lap
         # boundary[k] to lap boundary[k+1].
@@ -309,13 +312,15 @@ def _compute_biggest_team_gap(
     team name (single winner).
     """
     outcome = _outcome_for_round(round_id, "biggest_team_gap")
-    # Build team → list of classified finishing positions.
-    car_to_team = {rd.car_number: rd.constructor_name for rd in round_drivers}
+    # Build team → list of classified finishing positions. Team comes from
+    # the seat, so a stand-in counts for the team he drove for.
+    seats = seat_by_result(round_drivers, race_results)
     team_positions: dict[str, list[int]] = defaultdict(list)
     for r in race_results:
         if not r.is_classified:
             continue
-        team = car_to_team.get(r.car_number)
+        seat = seats.get(r)
+        team = seat.constructor_name if seat is not None else None
         if team is None:
             continue
         team_positions[team].append(r.position)
@@ -353,7 +358,7 @@ def compute_special_outcome(
     if special_key == "first_retirement":
         return _compute_first_retirement(round_id, race_results, round_drivers)
     if special_key == "most_pitstops":
-        return _compute_most_pitstops(round_id, pit_stops, round_drivers)
+        return _compute_most_pitstops(round_id, pit_stops, round_drivers, race_results)
     if special_key == "last_classified":
         return _compute_last_classified(round_id, race_results, round_drivers)
     if special_key == "margin_of_victory":

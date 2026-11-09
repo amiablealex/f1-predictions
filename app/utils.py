@@ -5,7 +5,7 @@ the round view, the friend's-view, and the admin overrides.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 from datetime import datetime, timezone
 from functools import wraps
@@ -46,6 +46,7 @@ from app.round_display import (
     actual_position_for_pick,
 )
 from app.scoring.provisional import withheld_for_session
+from app.seats import substitutions as seat_substitutions
 from app.specials import SPECIALS_BY_KEY
 from app.models.round import (
     Round,
@@ -491,6 +492,7 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
     contribution_actuals = _build_contribution_actuals(
         contribution_defs, contribution_preds, drivers_by_id,
     )
+    substitution_notes = _substitution_notes(round_drivers_list, sessions, drivers_by_id)
 
     # Per-phase point sums. None when no rows for that phase exist yet
     # (phase not scored); 0 when scored to 0 points.
@@ -544,6 +546,7 @@ def load_round_state(round_id: int, user_id: int) -> RoundUserState:
         contribution_scores=contribution_scores,
         contribution_points=contribution_points,
         any_substitution=any_sub,
+        substitutions=substitution_notes,
         sprint_points=sprint_points,
         quali_points=quali_points,
         race_points=race_points,
@@ -631,6 +634,33 @@ class RoundUserState:
     # Both None when nobody has any score for this round yet.
     average_total_points: int | None
     highest_total_points: int | None
+    # "TSU for LAW (RB F1 Team)" — every seat driven by a stand-in in any
+    # scored session, for the footnote.
+    substitutions: list[str] = field(default_factory=list)
+
+
+def _substitution_notes(
+    round_drivers: list[RoundDriver],
+    sessions: dict[SessionType, Session],
+    drivers_by_id: dict[int, Driver],
+) -> list[str]:
+    def code(driver_id: int) -> str:
+        d = drivers_by_id.get(driver_id)
+        if d is None:
+            return "?"
+        return d.code or d.driver_ref[:3].upper()
+
+    notes: list[str] = []
+    for st in (SessionType.QUALIFYING, SessionType.SPRINT_RACE, SessionType.RACE):
+        s = sessions.get(st)
+        if s is None or not s.results:
+            continue
+        for seat, r in seat_substitutions(round_drivers, s.results):
+            team = f" ({seat.constructor_name})" if seat.constructor_name else ""
+            note = f"{code(r.actual_driver_id)} for {code(seat.expected_driver_id)}{team}"
+            if note not in notes:
+                notes.append(note)
+    return notes
 
 
 def _drivers_lookup(round_obj: Round) -> dict[int, Driver]:

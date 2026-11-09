@@ -148,6 +148,10 @@ class APIQualifyingEntry:
     car_number: int
     driver_ref: str
     best_time_ms: int | None   # min of Q1/Q2/Q3 actually set
+    constructor_name: str | None = None
+    # Full driver record, so ingestion can create a debutant (e.g. a
+    # reserve) that isn't in the master list yet.
+    driver: APIDriver | None = None
 
 
 @dataclass(frozen=True)
@@ -162,6 +166,7 @@ class APIRaceEntry:
     grid: int | None = None    # starting grid position
     laps_completed: int | None = None  # laps the driver completed
     race_time_ms: int | None = None    # Jolpica's Time.millis (total race time)
+    driver: APIDriver | None = None    # full record, for debutants
 
 @dataclass(frozen=True)
 class APIPitStop:
@@ -356,6 +361,15 @@ class JolpicaClient:
         except KeyError as exc:
             raise JolpicaParseError(f"Driver missing field: {exc}") from exc
 
+    @classmethod
+    def _maybe_driver(cls, d: dict[str, Any]) -> APIDriver | None:
+        """Lenient `_parse_driver` for result rows: a missing name field
+        shouldn't fail the whole results ingest."""
+        try:
+            return cls._parse_driver(d)
+        except JolpicaParseError:
+            return None
+
     # =========================================================================
     # Public methods
     # =========================================================================
@@ -468,6 +482,8 @@ class JolpicaClient:
                 car_number=car_number,
                 driver_ref=driver_ref,
                 best_time_ms=best,
+                constructor_name=(r.get("Constructor") or {}).get("name"),
+                driver=self._maybe_driver(r["Driver"]),
             ))
         entries.sort(key=lambda e: e.position)
         return entries
@@ -572,6 +588,7 @@ class JolpicaClient:
                 grid=grid,
                 laps_completed=laps_completed,
                 race_time_ms=race_time_ms,
+                driver=self._maybe_driver(r["Driver"]),
             ))
         entries.sort(key=lambda e: e.position)
         return entries

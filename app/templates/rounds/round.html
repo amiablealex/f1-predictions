@@ -363,7 +363,10 @@
 </section>
 {% endif %}
 
-{% if state.any_substitution %}
-  <p class="muted small" style="margin-top:1rem;">* car was driven by a substitute driver</p>
+{% if state.substitutions or state.any_substitution %}
+  <p class="muted small" style="margin-top:1rem;">
+    {%- if state.substitutions %}Stand-ins this round: {{ state.substitutions|join(', ') }}. {% endif -%}
+    {%- if state.any_substitution %}* Seat driven by a stand-in. Points follow the seat.{% endif -%}
+  </p>
 {% endif %}
 {% endblock %}

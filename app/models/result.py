@@ -16,7 +16,8 @@ class SessionResult(db.Model):
 
     `actual_driver_id` records who actually drove the car (which may differ
     from the round's expected driver in the case of substitutions). The
-    scoring engine uses `car_number` to bridge predictions → actual results.
+    scoring engine bridges predictions → results by seat (see app/seats.py),
+    using `constructor_name`.
     """
 
     __tablename__ = "session_results"
@@ -30,6 +31,10 @@ class SessionResult(db.Model):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     car_number: Mapped[int] = mapped_column(Integer, nullable=False)
     actual_driver_id: Mapped[int] = mapped_column(ForeignKey("drivers.id", ondelete="RESTRICT"), nullable=False)
+    # Team the car was entered by, as Jolpica names it (matches
+    # RoundDriver.constructor_name). Seat resolution keys on this, since
+    # car numbers follow drivers. Null on rows ingested before it existed.
+    constructor_name: Mapped[str | None] = mapped_column(String(80))
 
     # Status text from the API ("Finished", "+1 Lap", "Engine", "Accident",
     # "Did not start", etc.). The scoring engine treats anything not in

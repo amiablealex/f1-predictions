@@ -8,13 +8,12 @@ including 0-point rows for predictions the user did not submit. This is
 deliberate: the round-results view always renders a row per slot, even
 when the user didn't fill it in.
 
-Substitution model (per scope):
-  Predictions reference *expected* drivers. The engine resolves a
-  prediction to an actual finishing position by looking up the car number
-  for that expected driver in the round's `RoundDriver` mapping, then
-  finding that car number in the session results. If Bottas drove car 44
-  in place of Hamilton and finished 5th, a user who picked Hamilton at
-  position 5 scores the full points.
+Substitution model:
+  A pick is a seat — the `RoundDriver` row the picked driver is listed
+  in. app/seats.py resolves each seat to the result of whoever drove it,
+  matching stand-ins by team (car numbers follow drivers, so they can't
+  identify a seat). If a reserve drove Hamilton's Ferrari and finished
+  5th, a user who picked Hamilton at position 5 scores the full points.
 """
 from __future__ import annotations
 
@@ -40,6 +39,7 @@ from app.models.prediction import (
 from app.models.result import SessionResult
 from app.models.round import Round, RoundScoringConfig, ScoringPhase, Session, SessionType
 from app.scoring.provisional import Withheld
+from app.seats import resolve_seats, result_for_pick
 
 
 # =============================================================================
@@ -74,36 +74,13 @@ class UserPredictions:
 # =============================================================================
 
 
-def _car_number_for_predicted_driver(
-    predicted_driver_id: int,
-    round_drivers: Iterable[RoundDriver],
-) -> int | None:
-    """Resolve a predicted driver to the car number they were the regular
-    occupant of for this round."""
-    for rd in round_drivers:
-        if rd.expected_driver_id == predicted_driver_id:
-            return rd.car_number
-    return None
-
-
-def _result_for_car(
-    car_number: int, session_results: Iterable[SessionResult]
-) -> SessionResult | None:
-    for r in session_results:
-        if r.car_number == car_number:
-            return r
-    return None
-
-
 def _resolve_actual_result(
     predicted_driver_id: int,
     round_drivers: Iterable[RoundDriver],
     session_results: Iterable[SessionResult],
 ) -> SessionResult | None:
-    car = _car_number_for_predicted_driver(predicted_driver_id, round_drivers)
-    if car is None:
-        return None
-    return _result_for_car(car, session_results)
+    """The result row for the seat the picked driver is listed in."""
+    return result_for_pick(predicted_driver_id, round_drivers, session_results)
 
 
 # =============================================================================
@@ -214,13 +191,15 @@ def score_quali_h2h(
 ) -> int:
     """Binary scoring for the head-to-head wager.
 
-    Compares the two pre-selected teammates' actual qualifying positions
-    by car number (substitution-aware). The user wins if they picked the
-    higher-qualifying one. DNQ handling: a teammate with no quali result
-    loses against one who set a time; if both DNQ'd, no scoring.
+    Compares the two pre-selected teammates' seats (substitution-aware).
+    The user wins if they picked the higher-qualifying seat. DNQ handling:
+    a seat with no quali result loses against one that set a time; if
+    both DNQ'd, no scoring. The two seats are the team's whole lineup, so
+    resolving them on their own is equivalent to resolving the full grid.
     """
-    res_a = _result_for_car(qh2h_driver_a.car_number, quali_results)
-    res_b = _result_for_car(qh2h_driver_b.car_number, quali_results)
+    resolved = resolve_seats([qh2h_driver_a, qh2h_driver_b], quali_results)
+    res_a = resolved.get(qh2h_driver_a)
+    res_b = resolved.get(qh2h_driver_b)
     if res_a is None and res_b is None:
         return 0
     if res_a is None:
@@ -293,18 +272,11 @@ def score_fastest_lap(
     round_drivers: list[RoundDriver],
     config: RoundScoringConfig,
 ) -> int:
-    """Substitution-aware fastest-lap scoring.
-
-    The user picked an expected driver. Find the car they were really
-    betting on, then check whether THAT CAR set the fastest lap (whoever
-    happened to drive it). This handles the substitution case correctly.
-    """
-    car = _car_number_for_predicted_driver(predicted_driver_id, round_drivers)
-    if car is None:
-        return 0
-    for r in race_results:
-        if r.car_number == car and r.is_fastest_lap:
-            return config.fastest_lap_correct
+    """Substitution-aware fastest-lap scoring: did the picked seat set the
+    fastest lap, whoever drove it."""
+    actual = _resolve_actual_result(predicted_driver_id, round_drivers, race_results)
+    if actual is not None and actual.is_fastest_lap:
+        return config.fastest_lap_correct
     return 0
 
 
@@ -361,10 +333,7 @@ def score_places_gained(
       - No grid_position recorded → 0 (defensive; the ingestion gate
         ensures this doesn't happen in practice).
     """
-    car = _car_number_for_predicted_driver(predicted_driver_id, round_drivers)
-    if car is None:
-        return 0
-    actual = _result_for_car(car, race_results)
+    actual = _resolve_actual_result(predicted_driver_id, round_drivers, race_results)
     if actual is None:
         return 0
     if actual.grid_position is None:

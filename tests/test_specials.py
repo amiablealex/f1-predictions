@@ -319,8 +319,8 @@ class TestLongestStint:
         # Driver 2 stops at lap 5 then DNFs lap 50 → stints 5 / 45 → 45 wins.
         rds = make_round_drivers([(1, 44, "M"), (2, 1, "R")])
         results = [
-            make_result(1, 44, laps_completed=30, is_classified=False, status="Engine"),
-            make_result(2, 1, laps_completed=50, is_classified=False, status="Hydraulics"),
+            make_result(1, 44, actual_driver_id=1, laps_completed=30, is_classified=False, status="Engine"),
+            make_result(2, 1, actual_driver_id=2, laps_completed=50, is_classified=False, status="Hydraulics"),
         ]
         stops = [make_pit_stop(2, 5, 1)]
         outcome = compute_special_outcome(1, "longest_stint", results, stops, rds)

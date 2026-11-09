@@ -8,13 +8,16 @@ substitutions. The model is:
   * `round_drivers` records, for a given round, who is the *expected*
     occupant of each car number. This is what populates the user's
     prediction dropdown.
-  * When scoring, we read the actual session result (which has a
-    `car_number`), look up which user-predicted driver was tied to that
-    car number for that round, and award points based on the actual
-    finishing position of that car number.
+  * When scoring, each seat is matched to the result of whoever drove it,
+    by team (app/seats.py). Car numbers belong to drivers in F1 — a
+    reserve races under his own number — so they can't identify a seat.
 
-This means a user picks "Hamilton (Ferrari, #44)" but is really betting on
-"whoever drives car 44 in this round" — exactly the rule we agreed.
+A user picks "Hamilton (Ferrari)" but is really betting on "whoever drives
+Hamilton's Ferrari seat this round".
+
+`round_drivers` is the lineup as offered on the form. The worker never
+rewrites it from results; the admin lineup editor (app/lineups.py) is the
+only thing that changes a seat's driver once the round exists.
 """
 from __future__ import annotations
 
@@ -45,17 +48,23 @@ class Driver(db.Model):
 
 
 class RoundDriver(db.Model):
-    """Maps car numbers to expected drivers for a specific round.
+    """One seat in a round's lineup: team + the driver expected in it.
 
-    Predictions reference `expected_driver_id` (the regular driver). Scoring
-    matches by `car_number` to whatever the API reports as the actual
-    occupant of that car in the session.
+    Predictions reference `expected_driver_id`. Scoring resolves the seat
+    to whoever actually drove it (app/seats.py). `car_number` is the
+    listed driver's number, kept as a fallback match key for result rows
+    that predate `SessionResult.constructor_name`.
     """
 
     __tablename__ = "round_drivers"
     __table_args__ = (
         UniqueConstraint("round_id", "car_number", name="uq_round_car"),
-        UniqueConstraint("round_id", "expected_driver_id", name="uq_round_driver"),
+        # Deferred so the lineup editor can move drivers between seats
+        # (A→B, B→C) in one transaction.
+        UniqueConstraint(
+            "round_id", "expected_driver_id", name="uq_round_driver",
+            deferrable=True, initially="DEFERRED",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

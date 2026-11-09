@@ -24,8 +24,10 @@ from dataclasses import dataclass
 
 from app.models.driver import Driver, RoundDriver
 from app.models.prediction import SpecialPrediction
+from app.models.result import SessionResult
 from app.models.round import Session
 from app.models.special import SpecialOutcome
+from app.seats import resolve_seats, seat_for_driver
 from app.specials import SpecialDef
 
 
@@ -64,13 +66,14 @@ def _status_label_for_unclassified(status: str | None) -> str:
     return "DNF"
 
 
-def _car_for_predicted_driver(
-    predicted_driver_id: int, round_drivers: list[RoundDriver],
-) -> int | None:
-    for rd in round_drivers:
-        if rd.expected_driver_id == predicted_driver_id:
-            return rd.car_number
-    return None
+def _pick_result(
+    predicted_driver_id: int, round_drivers: list[RoundDriver], session: Session,
+) -> tuple[bool, SessionResult | None]:
+    """(pick is in the lineup, result row for its seat)."""
+    seat = seat_for_driver(predicted_driver_id, round_drivers)
+    if seat is None:
+        return False, None
+    return True, resolve_seats(round_drivers, session.results).get(seat)
 
 
 def _driver_label(d: Driver | None) -> str:
@@ -95,11 +98,9 @@ def actual_position_for_pick(
     """
     if session is None or not session.results:
         return None
-    car = _car_for_predicted_driver(predicted_driver_id, round_drivers)
-    if car is None:
+    in_lineup, result = _pick_result(predicted_driver_id, round_drivers, session)
+    if not in_lineup:
         return None
-
-    result = next((r for r in session.results if r.car_number == car), None)
     if result is None:
         return ActualDisplay(text="DNS")
 
@@ -135,11 +136,9 @@ def actual_places_gained_for_pick(
     """
     if race_session is None or not race_session.results:
         return None
-    car = _car_for_predicted_driver(predicted_driver_id, round_drivers)
-    if car is None:
+    in_lineup, result = _pick_result(predicted_driver_id, round_drivers, race_session)
+    if not in_lineup:
         return None
-
-    result = next((r for r in race_session.results if r.car_number == car), None)
     if result is None:
         return ActualDisplay(text="DNS")
 
@@ -184,14 +183,9 @@ def actual_for_h2h(
         or quali_session is None or not quali_session.results
     ):
         return None
-    res_a = next(
-        (r for r in quali_session.results if r.car_number == rd_a.car_number),
-        None,
-    )
-    res_b = next(
-        (r for r in quali_session.results if r.car_number == rd_b.car_number),
-        None,
-    )
+    resolved = resolve_seats([rd_a, rd_b], quali_session.results)
+    res_a = resolved.get(rd_a)
+    res_b = resolved.get(rd_b)
     if res_a is None and res_b is None:
         return None
 
@@ -242,8 +236,8 @@ def actual_for_fastest_lap(
     is_exact = False
     substituted = False
     if predicted_driver_id is not None:
-        car = _car_for_predicted_driver(predicted_driver_id, round_drivers)
-        if car is not None and car == flap_row.car_number:
+        _, picked = _pick_result(predicted_driver_id, round_drivers, race_session)
+        if picked is flap_row:
             is_exact = True
             substituted = flap_row.actual_driver_id != predicted_driver_id
     return ActualDisplay(text=text, is_exact=is_exact, substituted=substituted)

@@ -86,9 +86,30 @@ def session_triggers_phase(session_type: SessionType) -> ScoringPhase | None:
 # =============================================================================
 
 
+# Admin-created drivers (a debutant announced before Jolpica knows them)
+# get a driver_ref of PLACEHOLDER_PREFIX + slug. The first real Jolpica
+# record with the same family name claims the row, so seats and picks
+# already pointing at it carry over.
+PLACEHOLDER_PREFIX = "pending_"
+
+
+def _claim_placeholder(db: DbSession, api_driver: APIDriver) -> Driver | None:
+    family = (api_driver.family_name or "").strip().lower()
+    if not family:
+        return None
+    for d in db.query(Driver).filter(Driver.driver_ref.startswith(PLACEHOLDER_PREFIX)).all():
+        if (d.family_name or "").strip().lower() == family:
+            log.info("drivers: %s claims placeholder %s", api_driver.driver_ref, d.driver_ref)
+            d.driver_ref = api_driver.driver_ref
+            return d
+    return None
+
+
 def upsert_driver(db: DbSession, api_driver: APIDriver) -> Driver:
     """Find-or-create a Driver row, refreshing display fields each time."""
     driver = db.query(Driver).filter_by(driver_ref=api_driver.driver_ref).one_or_none()
+    if driver is None:
+        driver = _claim_placeholder(db, api_driver)
     if driver is None:
         driver = Driver(driver_ref=api_driver.driver_ref)
         db.add(driver)
@@ -361,15 +382,15 @@ def copy_round_drivers_from_previous(db: DbSession, target_round: Round) -> int:
 def upsert_round_drivers_from_entries(
     db: DbSession, target_round: Round, entries: list[APIRoundEntry]
 ) -> int:
-    """Refresh RoundDriver from a session's actual entry list.
+    """Build RoundDriver from a session's actual entry list.
+
+    Bootstrap only: the worker calls this for a round with no lineup at
+    all. Once a lineup exists it is never rewritten from results — seat
+    resolution (app/seats.py) handles stand-ins at scoring time.
 
     For each (car_number, driver) in the entries:
       - upsert the master Driver row
       - upsert the RoundDriver mapping for this round + car number
-
-    Existing RoundDriver rows for cars that aren't in `entries` are kept
-    (they may correspond to drivers who DNS'd this session but are still
-    the regular for that seat).
     """
     api_drivers = [e.driver for e in entries]
     drivers_by_ref = upsert_drivers(db, api_drivers)
@@ -433,6 +454,7 @@ def ingest_qualifying_results(
             position=entry.position,
             car_number=entry.car_number,
             actual_driver_id=driver.id,
+            constructor_name=entry.constructor_name,
             status="Finished",  # quali doesn't use race-style status; record as Finished
             is_classified=True,
             is_fastest_lap=False,
@@ -472,6 +494,7 @@ def ingest_race_results(
             position=entry.position,
             car_number=entry.car_number,
             actual_driver_id=driver.id,
+            constructor_name=entry.constructor_name,
             status=entry.status,
             is_classified=entry.is_classified,
             is_fastest_lap=entry.is_fastest_lap,

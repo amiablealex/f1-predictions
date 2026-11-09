@@ -203,6 +203,21 @@ def _drivers_by_ref(season_driver_refs: set[str]) -> dict[str, Driver]:
     rows = db.session.query(Driver).filter(Driver.driver_ref.in_(season_driver_refs)).all()
     return {d.driver_ref: d for d in rows}
 
+
+def _drivers_for_entries(api_results: list) -> dict[str, Driver]:
+    """Master Driver rows for a result set, creating any the master list
+    doesn't have yet (a reserve's debut). Without this their result rows
+    would be skipped and their seat would score as a DNS."""
+    known = _drivers_by_ref({e.driver_ref for e in api_results})
+    missing = [
+        e.driver for e in api_results
+        if e.driver_ref not in known and getattr(e, "driver", None) is not None
+    ]
+    if missing:
+        log.info("results: adding new drivers %s", ", ".join(d.driver_ref for d in missing))
+        known.update(upsert_drivers(db.session, missing))
+    return known
+
 def _race_results_complete(
     api_results: list,
     session_obj: Session,
@@ -320,12 +335,12 @@ def _poll_session(app: Flask, client: JolpicaClient, s: Session, provisional_on:
         )
         return
 
-    # Refresh the round-driver mapping from this session's entries
-    # the first time results land for the round.
+    # A round that somehow reached results with no lineup gets one built
+    # from the entry list. Existing lineups are never rewritten here.
     try:
-        _refresh_round_drivers_if_first_session(client, round_obj, s)
+        _bootstrap_lineup_if_empty(client, round_obj)
     except JolpicaError as exc:
-        log.warning("results_poll: round-driver refresh failed: %s", exc)
+        log.warning("results_poll: lineup bootstrap failed: %s", exc)
 
     if s.status == SessionStatus.PROVISIONAL:
         log.info(
@@ -453,14 +468,12 @@ def _fetch_and_ingest_session(
     season, round_no = round_obj.season, round_obj.round_number
     if session_obj.session_type == SessionType.QUALIFYING:
         api_results = client.get_qualifying_results(season, round_no)
-        refs = {e.driver_ref for e in api_results}
-        drivers = _drivers_by_ref(refs)
+        drivers = _drivers_for_entries(api_results)
         ingest_qualifying_results(db.session, session_obj, api_results, drivers)
     elif session_obj.session_type == SessionType.RACE:
         api_results = client.get_race_results(season, round_no)
         _check_race_results(api_results, session_obj, gate)
-        refs = {e.driver_ref for e in api_results}
-        drivers = _drivers_by_ref(refs)
+        drivers = _drivers_for_entries(api_results)
         ingest_race_results(db.session, session_obj, api_results, drivers)
         # Fetch pit-stops in the same pass — needed for specials.
         try:
@@ -486,8 +499,7 @@ def _fetch_and_ingest_session(
     elif session_obj.session_type == SessionType.SPRINT_RACE:
         api_results = client.get_sprint_race_results(season, round_no)
         _check_race_results(api_results, session_obj, gate)
-        refs = {e.driver_ref for e in api_results}
-        drivers = _drivers_by_ref(refs)
+        drivers = _drivers_for_entries(api_results)
         ingest_race_results(db.session, session_obj, api_results, drivers)
     elif session_obj.session_type == SessionType.SPRINT_QUALI:
         # Deadline-only, nothing to fetch. Only lands here via the admin
@@ -498,16 +510,16 @@ def _fetch_and_ingest_session(
         log.warning("Unexpected session type for results poll: %s", session_obj.session_type)
 
 
-def _refresh_round_drivers_if_first_session(
-    client: JolpicaClient, round_obj: Round, just_completed: Session,
-) -> None:
-    """When the first results of a round land, refresh RoundDriver from
-    the actual entry list. This keeps the lineup up-to-date when the
-    seeded copy from the previous round was stale."""
-    landed = (SessionStatus.COMPLETED, SessionStatus.PROVISIONAL)
-    completed_count = sum(1 for s in round_obj.sessions if s.status in landed)
-    if completed_count > 1:
-        return  # not the first
+def _bootstrap_lineup_if_empty(client: JolpicaClient, round_obj: Round) -> None:
+    """Build RoundDriver from the entry list for a round with no lineup.
+
+    Lineups that exist are the lineup as offered on the form and are
+    never rewritten from results: stand-ins are resolved to seats at
+    scoring time (app/seats.py), and announced changes go through the
+    admin lineup editor.
+    """
+    if round_obj.round_drivers:
+        return
     try:
         entries = client.get_round_entries(
             round_obj.season, round_obj.round_number, prefer_session="qualifying"
@@ -548,7 +560,9 @@ def _has_app_context() -> bool:
     return has_app_context()
 
 
-def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
+def _phase_scoring_inner(round_id: int, phase: ScoringPhase, commit: bool = True) -> None:
+    """`commit=False` flushes instead, for callers that own the
+    transaction (the seat-repair dry run rolls it back)."""
     round_obj = (
         db.session.query(Round)
         .options(
@@ -634,7 +648,10 @@ def _phase_scoring_inner(round_id: int, phase: ScoringPhase) -> None:
         if s is not None:
             s.scored_at = now
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
 
 
 def _user_ids_with_predictions(round_id: int) -> list[int]:
