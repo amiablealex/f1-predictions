@@ -112,7 +112,7 @@
       <div></div>
       <div class="leaderboard-row__cols small muted">
         {% if last_scored %}
-          <span class="lb-col lb-col--last">Last (R{{ last_scored.round_number }})</span>
+          <span class="lb-col lb-col--last" title="Last round's score">R{{ last_scored.round_number }}</span>
         {% endif %}
         <span class="lb-col lb-col--total{% if view_kind != 'total' %} lb-col--narrow{% endif %}">{% if view_kind == 'total' %}Total (pprp){% else %}Total{% endif %}</span>
       </div>
@@ -120,17 +120,15 @@
 
     {% for row in rows %}
       <div class="leaderboard-row{% if row.is_self %} leaderboard-row--self{% endif %}">
-        <div class="leaderboard-row__name row" style="gap:12px;">
-          <span class="muted small tabular" style="min-width:2em;">{% if row.tied %}={% endif %}{{ row.rank }}</span>
+        <div class="leaderboard-row__name row">
+          <span class="leaderboard-row__rank muted small tabular">{% if row.tied %}={% endif %}{{ row.rank }}</span>
           {% if row.is_self %}
-            <span>{{ row.username }} <span class="small muted">(you)</span></span>
+            <span class="leaderboard-row__who" title="{{ row.username }}">{{ row.username }} <span class="small muted">(you)</span></span>
           {% elif row.user_id in linkable_ids %}
             <a href="{{ url_for('rounds.list_friend', username=row.username) }}"
-               class="leaderboard-row__link">
-              {{ row.username }}
-            </a>
+               class="leaderboard-row__link leaderboard-row__who" title="{{ row.username }}">{{ row.username }}</a>
           {% else %}
-            <span>{{ row.username }}</span>
+            <span class="leaderboard-row__who" title="{{ row.username }}">{{ row.username }}</span>
           {% endif %}
           {% if row.user_id in submitted_ids %}<svg class="submitted-tick" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Predictions in"><title>Predictions in for R{{ open_round.round_number }}</title><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}
         </div>

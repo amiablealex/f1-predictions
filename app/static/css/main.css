@@ -564,7 +564,7 @@ p { margin: 0 0 var(--space-3) 0; }
 .movement--same { color: var(--c-ink-muted); }
 
 /* League-mates with picks saved for the open round. */
-.submitted-tick { flex: 0 0 auto; margin-left: -6px; color: var(--c-points-10); }
+.submitted-tick { flex: 0 0 auto; margin-left: -2px; color: var(--c-points-10); }
 
 /* ----------------------------------------------------------- Status banner */
 
@@ -1473,9 +1473,19 @@ p { margin: 0 0 var(--space-3) 0; }
    header and every row so each figure sits under its heading. */
 .leaderboard-row__cols { gap: var(--space-2); }
 .lb-col { display: inline-block; text-align: right; flex: 0 0 auto; font-size: var(--fs-sm); }
-.lb-col--last  { width: 4.4rem; }
-.lb-col--total { width: 6.4rem; white-space: nowrap; }
-.lb-col--total.lb-col--narrow { width: 3rem; }   /* head-to-head: no pprp beside the total */
+.lb-col--last  { width: 2.4rem; }
+.lb-col--total { width: 5.6rem; white-space: nowrap; }
+.lb-col--total.lb-col--narrow { width: 3rem; }
+/* Names: one line; a name too long for the space ends in an ellipsis
+   (full name on long-press). Rank column sized for "=10". */
+.leaderboard-row__name { gap: var(--space-2); }
+.leaderboard-row__rank { flex: 0 0 1.9em; }
+.leaderboard-row__who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}   /* head-to-head: no pprp beside the total */
 .leaderboard-row__total { font-weight: 600; }
 /* Self row: bleed the highlight outwards so its figures stay on the column lines. */
 .leaderboard-row--self { margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px; }
